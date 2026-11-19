@@ -1,0 +1,12 @@
+# A7 Rádios On-Line — Instruções de agente
+
+1. Leia **integralmente** `docs/project.md`, `docs/architecture.md` e `docs/deployment.md` antes de editar. São a especificação do projeto; diferencie confirmado, recomendado e pendente. Não invente rádios, provas, audiência, identidade, textos jurídicos ou contatos.
+2. Inspecione o repositório e o contexto HostGator/WordPress; trabalhe na branch `feat/v1-a7-radios` a partir da `main`. Preserve `main`; **sem commit, push, PR, merge ou deploy** sem solicitação explícita.
+3. Implemente a V1 **completa e navegável**, com React + TypeScript + Tailwind + Vite, pnpm e `pnpm-lock.yaml`; PHP próprio versionado para WordPress existente em `/app/`. Nunca crie Node permanente no servidor compartilhado.
+4. Arquitetura obrigatória: cada seção/tela principal em componente `.tsx` próprio; `App.tsx`/rotas compõem, não concentram JSX; separar UI, dados, autenticação, API, player, domínio, moderação e SEO quando útil. Types claros, sem `any` injustificado, duplicação, boilerplate ou abstração prematura.
+5. **SEO bloqueante:** `/radio/{slug}/` aprovado deve devolver HTML inicial indexável, status correto, title/description/canonical/OG, H1/conteúdo factual, sitemap. React client-only com meta tags em `useEffect` é insuficiente. Não comprometa as rotas `/app/` do WordPress.
+6. Segurança bloqueante: autenticação mesma origem, nonce + capabilities + propriedade verificadas no backend, versões publicadas imutáveis até aprovação, no-store para privados, upload/URL remota segura, rate limit e isolamento entre usuários. Consultas diretas de API externa somente se HTTPS/CORS/termos permitirem; sem proxy por hábito.
+7. Player: sem consulta de metadados antes de `playing`; sem campo de API; cancelar polling ao parar; nunca bloquear streaming por metadados; fallback logo/nome. Uma instância de áudio, sem áudio próprio/relay.
+8. Preservar logo fornecido em `assets/`, preparar variantes sem redesenhar. Direção **light cinematográfica**, motion intencional implementado já na V1, `prefers-reduced-motion`, responsividade/acessibilidade desde início. Dados DEMO somente em ambiente local/staging.
+9. Footer em todas as páginas públicas: **Desenvolvido por Douglas Borges - Smart Local** com link `https://smartlocal.com.br`, nova aba, `rel="noopener noreferrer"`.
+10. Execute typecheck, lint, build, testes reais de auth/moderação/SEO sem JS/HTTP 404/HostGator, QA visual desktop/mobile. Documente lacunas, riscos e instruções de publicação. Nunca alegue teste ou deploy não realizado.
