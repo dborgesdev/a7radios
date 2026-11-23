@@ -127,3 +127,15 @@ A V2 aplica a identidade Broadcast Premium ao portal, à área do proprietário 
 Cidade é um campo opcional de até 100 caracteres. Aparece no painel, na revisão administrativa e, após aprovação, na página da rádio, no catálogo e na busca. Cadastros antigos continuam válidos. Uma sugestão de categoria é enviada independentemente do cadastro da rádio. O proprietário pode escolher uma categoria existente ou aguardar a decisão antes de enviar.
 
 A página direta da rádio pode tentar iniciar a reprodução com a instância existente de áudio. Se o navegador bloquear, o botão Ouvir Rádio continua disponível. O contador representa visitas aproximadas à página. Um pedido de remoção entra na fila privada e a rádio permanece disponível até uma decisão administrativa. O arquivamento imediato continua disponível para o moderador.
+
+## Refinamento Broadcast Premium
+
+A Home usa prateleiras horizontais para 10 novidades ordenadas pela primeira publicação e até 30 sugestões distintas. Os cards da Home exibem estado e país. Catálogo, favoritos e recomendações compartilham o mesmo card. O catálogo mantém 24 resultados por página, com grades de 6, 4, 3 e 2 colunas. Assim, os limites de paginação e a ordem permanecem estáveis ao redimensionar. Busca e categoria fazem parte da URL.
+
+O player da página individual e o flutuante usam o mesmo elemento de áudio, volume, fila e estado. Um observador mede a área visível abaixo do cabeçalho fixo. O flutuante só aparece se o player principal estiver fora da área visível e houver reprodução ou conexão em andamento. Autoplay é tentado uma vez ao entrar em uma rádio se o player estiver livre. O contador de visitas faz parte do hero e segue a deduplicação já existente.
+
+O formulário agrupa identidade, transmissão, apresentação e termo. A sugestão de categoria pode acompanhar o cadastro sem categoria alternativa. O moderador pode usar uma categoria existente, confirmar a sugestão ou ajustar seu nome antes de criar o termo. Pedidos de remoção de contas autenticadas usam a identidade de sessão. Na edição, o proprietário acompanha o status do pedido. O pedido fica na fila até decisão explícita.
+
+O WordPress tem indicadores com links por fila, busca por nome, slug ou ID, seleção por página e moderação em lote com retorno por item. O arquivamento requer motivo e confirmação. Edições administrativas ficam identificadas no histórico. Em rádio publicada, a correção forma uma nova versão. Se houver revisão pendente, o moderador precisa confirmar seu encerramento antes de publicar a correção. Em rádio ainda inédita, a correção permanece na fila.
+
+Critérios de aceite incluem as prateleiras em uma linha, grade completa antes da última página, troca de apresentação do player com áudio contínuo, formulários em desktop e mobile, moderação com sessão e nonce, HTML inicial com metadados individuais e HTTP 404 real para emissora indisponível.

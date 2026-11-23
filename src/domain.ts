@@ -10,6 +10,7 @@ export type Radio = Omit<RadioFields, 'categoryId'> & {
 export type Status = 'pending' | 'approved' | 'rejected' | 'archived'
 export type OwnRadio = {
   id: number; slug: string; status: Status; revisionStatus: 'pending' | 'approved' | 'rejected';
+  removalStatus?: 'pending' | 'approved' | 'rejected' | null; categorySuggestion?: { id: string; name: string } | null;
   version: number; revisionId: number; submittedAt: string; reason: string; categoryName: string; imagePath?: string; draft: RadioFields;
   history: { id: number; status: Status; decidedAt: string; reason: string }[]
 }

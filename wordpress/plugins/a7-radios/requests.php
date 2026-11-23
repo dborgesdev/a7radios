@@ -29,23 +29,55 @@ function suggest_category(\WP_REST_Request $request): \WP_REST_Response|\WP_Erro
     if (!save_request('category', hash('sha256', $slug), ['name' => $name, 'slug' => $slug, 'owner' => $owner])) {
         return err('Já existe uma solicitação para esse nome ou o envio está indisponível.', 409);
     }
-    return new \WP_REST_Response(['message' => 'Sugestão enviada. Use uma categoria existente para enviar a Rádio agora ou aguarde a análise.'], 201);
+    return new \WP_REST_Response(['message' => 'Sugestão registrada para análise.', 'id' => hash('sha256', $slug), 'name' => $name], 201);
+}
+
+function request_record(string $type, string $id): ?array {
+    global $wpdb;
+    $value = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'a7r_queue_' . $type . '_' . $id));
+    return json_decode((string) $value, true);
+}
+
+function removal_key(int $radio, int $owner): string {
+    return hash('sha256', $radio . ':' . $owner);
 }
 
 function request_removal(\WP_REST_Request $request): \WP_REST_Response|\WP_Error {
     $id = (int) $request->get_url_params()['id'];
-    if (!permit('removal_request', ip(), 5, HOUR_IN_SECONDS)) return err('Aguarde antes de tentar novamente.', 429);
-    $row = row_by_id($id);
+    $account = wp_get_current_user();
+    $private = str_contains($request->get_route(), '/me/');
+    $row = $private ? owner_row($id) : row_by_id($id);
+    if (is_wp_error($row)) return $row;
     if (!$row || $row['status'] !== 'approved') return err('Rádio indisponível.', 404);
+    if ($account->exists() && !wp_verify_nonce($request->get_header('X-WP-Nonce'), 'wp_rest')) return err('Sessão inválida.', 403);
+    $owner = $account->exists() ? $account->ID : 0;
+    $key = $owner ? removal_key($id, $owner) : str_replace('-', '', wp_generate_uuid4());
+    $existing = $owner ? request_record('removal', $key) : null;
+    if ($existing) return err('Esta conta já solicitou a remoção desta Rádio.', 409);
+    if (!permit('removal_request', $owner ? 'user:' . $owner : ip(), 5, HOUR_IN_SECONDS)) return err('Aguarde antes de tentar novamente.', 429);
     $data = ['radio' => $id];
-    foreach (['name' => 100, 'email' => 254, 'reason' => 200, 'evidence' => 3000] as $key => $limit) {
-        $value = request_text($request, $key, $limit, $key === 'evidence');
-        if (is_wp_error($value)) return $value;
-        $data[$key] = $value;
+    $reason = request_text($request, 'reason', 200);
+    if (is_wp_error($reason)) return $reason;
+    $data['reason'] = $reason;
+    if ($owner) {
+        $data += ['requester' => $owner, 'name' => $account->display_name, 'email' => $account->user_email];
+    } else {
+        foreach (['name' => 100, 'email' => 254] as $field => $limit) {
+            $value = request_text($request, $field, $limit);
+            if (is_wp_error($value)) return $value;
+            $data[$field] = $value;
+        }
+        if (!is_email($data['email'])) return err('Informe um e-mail válido.', 422, 'email');
     }
-    if (!is_email($data['email'])) return err('Informe um e-mail válido.', 422, 'email');
-    if (!save_request('removal', str_replace('-', '', wp_generate_uuid4()), $data)) return err('Não foi possível registrar o pedido.', 503);
-    return new \WP_REST_Response(['message' => 'Pedido enviado para análise.'], 201);
+    $raw = $request['evidence'];
+    $evidence = $owner && ($raw === null || (is_string($raw) && trim($raw) === '')) ? '' : request_text($request, 'evidence', 3000, true);
+    if (is_wp_error($evidence)) return $evidence;
+    $data['evidence'] = $evidence;
+    if (!save_request('removal', $key, $data)) {
+        if ($owner && request_record('removal', $key)) return err('Esta conta já solicitou a remoção desta Rádio.', 409);
+        return err('Não foi possível registrar o pedido.', 503);
+    }
+    return new \WP_REST_Response(['message' => 'Pedido enviado para análise.', 'status' => 'pending'], 201);
 }
 
 function pending_requests(string $type, int $limit, int $offset = 0): array {
@@ -79,6 +111,7 @@ function requests_page(): void {
                 <p><strong><?= esc_html($data['reason']) ?></strong></p><p><?= nl2br(esc_html($data['evidence'])) ?></p>
             <?php endif; ?>
             <p><label>Justificativa <textarea name="reason" maxlength="1000" required></textarea></label></p>
+            <?php if ($type === 'removal'): ?><p><label><input type="checkbox" name="confirmArchive" value="1"> Confirmo o arquivamento se o pedido for aprovado</label></p><?php endif; ?>
             <button class="button button-primary" name="decision" value="approve"><?= $type === 'removal' ? 'Aprovar e arquivar Rádio' : 'Aprovar categoria' ?></button>
             <button class="button" name="decision" value="reject">Rejeitar</button>
         </form>
@@ -110,6 +143,7 @@ add_action('admin_post_a7r_request_decision', static function () {
         if (is_wp_error($result) && $result->get_error_code() !== 'term_exists') wp_die('Não foi possível criar a categoria.', '', ['response' => 409]);
     }
     if ($decision === 'approve' && $match[1] === 'removal') {
+        if (form_value('confirmArchive') !== '1') wp_die('Confirme o arquivamento da rádio.', '', ['response' => 422, 'back_link' => true]);
         $radio = row_by_id((int) $data['radio']);
         if ($radio && $radio['status'] !== 'archived') {
             $result = moderate($radio, (int) $radio['sequence'], 'archive', $reason, get_current_user_id());

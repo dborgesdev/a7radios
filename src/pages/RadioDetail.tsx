@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
+import { PageHero } from '../components/PageHero'
 import { RemovalRequest } from '../components/RemovalRequest'
-import { Share2 } from 'lucide-react'
+import { Eye, MapPin, Share2 } from 'lucide-react'
 import { demo, recordVisit, useApi } from '../api'
-import { Cover, Empty, RadioCards } from '../components/RadioCards'
+import { Cover, RadioCards } from '../components/RadioCards'
 import { locationLabel, radioPath, type Radio, type Page } from '../domain'
 import { FavoriteButton } from '../favorites'
-import { PlayButton, useDirectAutoplay } from '../player'
+import { IntegratedPlayer, useDirectAutoplay } from '../player'
 
 export function RadioDetail({ initial }: { initial?: Radio }) {
   const { slug } = useParams()
-  const { key } = useLocation()
   const result = useApi<Radio>(slug ? '/radios/' + encodeURIComponent(slug) : null)
   const radio = result.data ?? (result.loading && initial?.slug === slug ? initial : undefined)
   const title = radio?.name ?? (result.loading ? undefined : 'Rádio indisponível')
@@ -18,8 +18,8 @@ export function RadioDetail({ initial }: { initial?: Radio }) {
     if (title) document.title = title + ' | A7 Rádios'
   }, [title])
   return result.loading && !radio ? <div className="shell page" role="status">Carregando rádio…</div> :
-    radio ? <RadioProfile key={radio.id} radio={radio} direct={!demo && key === 'default' && initial?.slug === slug} /> :
-      <div className="shell page"><h1>Rádio indisponível</h1><Empty>{result.error ?? 'Esta rádio não está disponível.'}</Empty><Link to="/radios/">Ver catálogo</Link></div>
+    radio ? <RadioProfile key={radio.id} radio={radio} direct={!demo} /> :
+      <PageHero variant="error" eyebrow="A7 Rádios On-Line" title="Rádio indisponível" description={result.error ?? 'Esta rádio não está disponível.'} action={<Link className="button primary" to="/radios/">Ver catálogo</Link>} />
 }
 
 function RadioProfile({ radio, direct }: { radio: Radio; direct: boolean }) {
@@ -46,23 +46,36 @@ function RadioProfile({ radio, direct }: { radio: Radio; direct: boolean }) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) setSharing(url)
     }
   }
-  return <div className="shell page">
-    <nav className="breadcrumb" aria-label="Você está em"><Link to="/">Início</Link> / <Link to="/radios/">Rádios</Link></nav>
-    <div className="radio-detail"><Cover radio={radio} eager /><div>
-      <p className="eyebrow"><Link to={'/radios/?' + new URLSearchParams({ category: radio.category.slug })}>{radio.category.name}</Link></p>
-      <h1>{radio.name}</h1><p className="muted">{locationLabel(radio)}</p>
-      <div className="actions"><PlayButton radio={radio} /><FavoriteButton slug={radio.slug} />
-        <button onClick={share} className="button secondary"><Share2 size={18} /> Compartilhar</button></div>
-      {sharing && <p role="status" className="break-all">{sharing}</p>}
-    </div></div>
-    <section className="about"><h2>Sobre a rádio</h2><p>{radio.description}</p>
-      <div className="actions">
-        {radio.websiteUrl && <a className="button secondary" href={radio.websiteUrl} target="_blank" rel="noopener noreferrer">Visitar site da Rádio</a>}
-        {radio.appDownloadUrl && <a className="button secondary" href={radio.appDownloadUrl} target="_blank" rel="noopener noreferrer">Baixar App</a>}
-        {!demo && <RemovalRequest id={radio.id} />}
+  return <>
+    <header className="station-hero">
+      <div className="shell station-shell">
+        <nav className="breadcrumb" aria-label="Você está em"><Link to="/">Início</Link><span aria-hidden="true">/</span><Link to="/radios/">Rádios</Link></nav>
+        <div className="station-identity">
+          <div className="station-art"><Cover radio={radio} eager /></div>
+          <div className="station-copy">
+            <p className="station-category"><Link to={'/radios/?' + new URLSearchParams({ category: radio.category.slug })}>{radio.category.name}</Link></p>
+            <h1>{radio.name}</h1>
+            <p className="station-location"><MapPin size={17} aria-hidden="true" />{locationLabel(radio)}</p>
+            <IntegratedPlayer radio={radio} />
+            <div className="station-actions">
+              <FavoriteButton slug={radio.slug} />
+              <button onClick={share} className="button secondary"><Share2 size={18} /> Compartilhar</button>
+              {count !== undefined && <span className="station-visits"><Eye size={18} aria-hidden="true" />{count} {count === 1 ? 'visita à página' : 'visitas à página'}</span>}
+            </div>
+            {sharing && <p role="status" className="break-all">{sharing}</p>}
+          </div>
+        </div>
       </div>
-      {count !== undefined && <p className="muted">{count} {count === 1 ? 'visita à página' : 'visitas à página'}</p>}
-    </section>
-    {!!others.length && <section className="content-section"><h2>Você também pode gostar</h2><RadioCards radios={others} /></section>}
-  </div>
+    </header>
+    <div className="shell page station-body">
+      <section className="station-editorial content-section"><div><h2>Sobre a rádio</h2><p>{radio.description}</p></div>
+        {(radio.websiteUrl || radio.appDownloadUrl || !demo) && <div className="station-links">
+          {radio.websiteUrl && <a className="button secondary" href={radio.websiteUrl} target="_blank" rel="noopener noreferrer">Visitar site da Rádio</a>}
+          {radio.appDownloadUrl && <a className="button secondary" href={radio.appDownloadUrl} target="_blank" rel="noopener noreferrer">Baixar App</a>}
+          {!demo && <RemovalRequest id={radio.id} name={radio.name} />}
+        </div>}
+      </section>
+      {!!others.length && <section className="content-section"><div className="section-heading"><h2>Você também pode gostar</h2></div><RadioCards radios={others} /></section>}
+    </div>
+  </>
 }

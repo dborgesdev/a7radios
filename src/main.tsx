@@ -6,6 +6,7 @@ import { FavoritesProvider } from './favorites'
 import { PlayerProvider } from './player'
 import type { Radio } from './domain'
 import './style.css'
+import './broadcast.css'
 
 const root = document.getElementById('root')
 const payload = document.getElementById('a7-initial')?.textContent

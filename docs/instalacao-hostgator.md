@@ -1,43 +1,24 @@
-# Instalação A7 Rádios na HostGator
+# Publicação A7 Rádios 2.1.0 na HostGator
 
-Use a raiz atribuída a `a7radios.com.br` em **cPanel → Domínios**. Neste guia, `RAIZ` representa esse diretório, geralmente `public_html`. O WordPress existente fica em `RAIZ/app/`. O servidor precisa de WordPress 6.6+, PHP 8.2+, MySQL ou MariaDB com InnoDB, GD ou Imagick com suporte aos formatos de imagem aceitos, HTTPS e Apache com `mod_rewrite` habilitado. `mod_headers` é usado para o cache dos assets.
+O pacote `a7-radios-hostgator-2.1.0.zip` reúne o frontend estático e o plugin da mesma versão, as regras Apache, o trecho para o `wp-config.php` e as somas SHA-256. Extraia o pacote externo no computador. Na hospedagem, aplique os arquivos internos conforme a tabela.
 
-1. Faça backup do banco, de `RAIZ/.htaccess`, dos arquivos atuais da raiz e do `wp-config.php`. Ative **Mostrar arquivos ocultos** no Gerenciador de Arquivos. Confirme que os endereços WordPress e Site do WordPress atual apontam para `https://a7radios.com.br/app` e que `/app/wp-json/` responde.
-2. No `wp-config.php` em uso, antes de carregar `wp-settings.php`, configure as constantes abaixo. Remova uma eventual definição antiga de `A7R_MEDIA_DIR`. O plugin usa `RAIZ/app/wp-content/a7-radios-media/` e cria a pasta e seu `.htaccess` ao ativar ou no primeiro envio, desde que a regra da raiz já esteja instalada e o PHP possa gravar em `wp-content`.
+| Arquivo | Destino |
+| --- | --- |
+| `a7-radios-wordpress-2.1.0.zip` | **WordPress → Plugins → Adicionar plugin → Enviar plugin**. Substitua o plugin atual pelo enviado. A pasta ativa deve continuar em `RAIZ/app/wp-content/plugins/a7-radios/`. |
+| `a7-radios-frontend-2.1.0.zip` | Extraia o conteúdo na raiz do domínio `a7radios.com.br`, identificada em **cPanel → Domínios**. Esta raiz é chamada de `RAIZ` neste guia. |
+| `apache-raiz.txt` | Mescle as regras no arquivo existente `RAIZ/.htaccess`. Preserve as diretivas do servidor e o arquivo `RAIZ/app/.htaccess`. |
+| `wp-config-producao.txt` | Aplique as quatro definições no `wp-config.php` em uso pelo WordPress em `/app/`, antes do carregamento de `wp-settings.php`. Edite definições preexistentes para manter uma definição por constante. |
 
-   ```php
-   define('A7R_ORIGIN', 'https://a7radios.com.br');
-   define('A7R_REGISTRATION', true);
-   define('A7R_REMOTE_IMAGES', false);
-   define('A7R_INDEX', false);
-   ```
+## Ordem de publicação
 
-   O plugin detecta a raiz pelo document root do Apache. Se for necessário apontá-la explicitamente, acrescente `define('A7R_FRONTEND_DIR', '/home/CONTA_CPANEL/public_html');` com o caminho real. Ajuste `upload_max_filesize` para pelo menos 6 MB e `post_max_size` para pelo menos 8 MB no PHP. A alternativa de imagem por URL fica disponível se você ativar `A7R_REMOTE_IMAGES` e o PHP tiver cURL com TLS funcional.
+1. Em **cPanel → Domínios**, confira a raiz de `a7radios.com.br`. Faça backup do banco, do plugin atual, dos arquivos do frontend, do `wp-config.php`, dos dois `.htaccess` e de `RAIZ/app/wp-content/a7-radios-media/`. Guarde o backup fora da raiz pública. O plugin 2.1.0 preserva as tabelas e os registros existentes.
+2. Envie os novos arquivos estáticos em `RAIZ/assets/` e as imagens do ZIP. Mantenha os assets com hash da versão anterior. Atualize o plugin pelo painel WordPress, preservando o mesmo diretório e a ativação. Troque `RAIZ/.vite/manifest.json` e `RAIZ/index.html` depois que os novos assets estiverem presentes. Ative **Mostrar arquivos ocultos** no Gerenciador de Arquivos para transferir `.vite/`.
+3. Compare o trecho Apache com a configuração atual. A regra `RewriteRule ^app/wp-content/a7-radios-media(?:/|$) - [F,NC]` deve ser a primeira `RewriteRule` da raiz, fora de condicionais e sem `RewriteCond` imediatamente anterior. Preserve a delegação de `/app/` antes das rotas públicas. Se houver arquivos físicos `robots.txt` ou `sitemap*.xml` que substituam as respostas dinâmicas, guarde-os no backup e retire as cópias conflitantes da raiz. O frontend é estático e dispensa Node.js na HostGator.
+4. Aplique `A7R_ORIGIN=https://a7radios.com.br`, `A7R_REGISTRATION=true`, `A7R_REMOTE_IMAGES=false` e `A7R_INDEX=true` pelo trecho incluído. Em **Configurações → Leitura**, desmarque a opção de desencorajar mecanismos de busca. Se houver `WP_ENVIRONMENT_TYPE` definido explicitamente, use `production` nessa instalação. Preserve os endereços WordPress e Site em `https://a7radios.com.br/app`. Mantenha os documentos legais vigentes e exclua páginas privadas e sessão do cache forçado. Invalide o cache de HTML e `robots.txt` após a troca.
+5. Confira `/`, `/radios/`, uma rádio aprovada e `/app/wp-admin/`. A Home, o catálogo canônico e as rádios aprovadas devem servir `index, follow`. `/robots.txt` deve anunciar `https://a7radios.com.br/sitemap.xml`. Uma rádio inexistente deve retornar 404. `/painel/` deve servir `noindex` e `Cache-Control: private, no-store`. Confirme que `/.vite/manifest.json` e a pasta privada de imagens retornam 403 em acesso direto. Verifique o cadastro e o recebimento do e-mail de recuperação com conta controlada.
 
-3. Em **WordPress → Plugins → Adicionar plugin → Enviar plugin**, instale `a7-radios-wordpress-v2.zip` e ative **A7 Rádios On-Line**. A pasta final será `RAIZ/app/wp-content/plugins/a7-radios/`.
-4. Extraia `a7-radios-frontend-v2.zip` diretamente em `RAIZ/`, ou copie o conteúdo de `dist/` para lá. O resultado deve incluir `RAIZ/index.html`, `RAIZ/assets/`, `RAIZ/.vite/manifest.json`, `RAIZ/a7-logo.webp`, `RAIZ/broadcast-studio.webp`, `RAIZ/a7-icon.png` e `RAIZ/a7-og.jpg`. Mantenha os assets com hash da versão anterior até concluir a troca do manifesto e a validação.
-5. Mescle `dist/.htaccess` em `RAIZ/.htaccess`. O ZIP do frontend deixa esse arquivo separado para evitar troca acidental das regras do servidor:
-   - Preserve as diretivas do cPanel, do PHP e de segurança. Com `RewriteEngine On` habilitado, ponha `RewriteRule ^app/wp-content/a7-radios-media(?:/|$) - [F,NC]` como primeira `RewriteRule` da raiz, fora de blocos condicionais e sem `RewriteCond` imediatamente anterior. Em seguida preserve as regras de domínio/HTTPS e instale a delegação de `/app/` antes dos fallbacks da raiz. Preserve `RAIZ/app/.htaccess`.
-   - Se a raiz já tiver arquivos físicos `robots.txt` ou `sitemap*.xml`, mova as versões antigas para o backup após revisar as diretivas que precisam ser mantidas. Arquivos físicos com esses nomes têm precedência sobre a resposta dinâmica.
-   - Exclua HTML dinâmico, Ajax de sessão e API A7 de regras de cache forçado. Confira a sessão via HTTPS, inclusive se a hospedagem estiver atrás de CDN. O arquivo `/.vite/manifest.json` deve retornar 403 externamente, enquanto o PHP lê a cópia local.
-6. Em **A7 Rádios → Categorias**, cadastre as categorias. Em **Documentos aprovados**, publique o Termo de Responsabilidade e a Política de Privacidade após validação. O termo vigente libera o envio de rádios. Confirme a entrega de e-mail de recuperação pelo WordPress e mantenha `A7R_INDEX` como `false` até autorizar a indexação.
+A versão usa WordPress 6.6+, PHP 8.2+, GD ou Imagick, MySQL ou MariaDB com InnoDB, funções JSON e locks de sessão. A pasta privada de imagens mantém o `.htaccess` local com `Require all denied`, `Options -Indexes -ExecCGI` e `SetHandler none`. O endpoint de imagem pública entrega apenas o arquivo da versão aprovada.
 
-## Proteção da pasta de imagens
+## Rollback
 
-Antes de enviar imagens reais, confirme que o PHP pode criar e escrever em `RAIZ/app/wp-content/a7-radios-media/`. Se precisar criar a pasta e o arquivo manualmente pelo cPanel, salve o seguinte conteúdo em `RAIZ/app/wp-content/a7-radios-media/.htaccess`, sem BOM, e mantenha a pasta fora de aliases públicos.
-
-```apache
-Require all denied
-Options -Indexes -ExecCGI
-SetHandler none
-```
-
-Envie um arquivo de texto inofensivo de teste nessa pasta e confirme HTTP 403 no endereço direto dele e da pasta. Remova o arquivo após a conferência. Exclua esse caminho e os endpoints de imagens A7 de regras de cache forçado ou de entrega estática da CDN. Na migração de uma instalação anterior, depois de validar o bloqueio, copie apenas as mídias PNG geradas pelo plugin para a nova pasta, preservando os nomes. Os identificadores e as URLs públicas da API continuam válidos. Faça backup da pasta junto com o banco.
-
-## Verificação após instalar
-
-- Abra `/`, `/radios/`, `/login/`, `/app/wp-admin/` e `/app/wp-json/`. Confirme que `/radio/inexistente/` retorna HTTP 404.
-- Cadastre uma rádio com um stream HTTPS autorizado. Confira que ela só aparece no catálogo e no sitemap após aprovação. Em seguida, envie uma revisão e confira que a página mostra a versão anterior até aprová-la.
-- Confira HTML, H1 e canonical com JavaScript desligado e teste streaming no navegador. Enquanto a indexação estiver desativada, a página aprovada deve servir `noindex` e `/robots.txt` deve omitir o anúncio do sitemap A7.
-
-Em caso de falha, restaure os arquivos anteriores da raiz e desative o plugin, mantendo o bloqueio da pasta no `.htaccess` da raiz e dentro da própria pasta. Preserve o banco e o diretório de imagens para conservar cadastros e históricos. Veja [o plano de publicação e rollback](deployment.md).
+Restaure em conjunto a pasta anterior do plugin, o manifesto e HTML anteriores, o `wp-config.php` e as regras Apache anteriores. Preserve o WordPress em `/app/`, as mídias protegidas e o banco ativo. Use o backup do banco apenas se precisar recuperar dados, reconciliando alterações posteriores à cópia.

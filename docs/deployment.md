@@ -71,3 +71,15 @@ Em 23/11/2026, passaram typecheck, lint, build, sintaxe PHP e a suíte de integr
 No Edge, o portal foi exercitado em 320, 375, 768, 1024 e 1440 px. Os testes incluíram navegação por teclado, busca, redução de movimento, player persistente com áudio sintético e recuperação após bloqueio simulado de autoplay. O formulário do proprietário e a prévia Markdown também foram exercitados no WordPress local.
 
 A homologação na HostGator, o e-mail transacional real, streams autorizados de produção e a liberação de indexação continuam pendentes. Confira a configuração real de Apache, PHP, WordPress, banco e cache antes de publicar. Use os ZIPs V2 da pasta `release/`. O ZIP do frontend mantém as regras Apache separadas em `dist/.htaccess` para mesclagem em homologação.
+
+### Homologação local do refinamento
+
+A suíte `node scripts/test-local.mjs` foi exercitada no WordPress local com Apache e MariaDB. A verificação cobriu a edição administrativa, associação e normalização de categoria, moderação com sequência desatualizada, remoção autenticada e anônima, titularidade, documentos versionados e SEO servido pelo PHP.
+
+No Edge, o catálogo DEMO foi usado em 320, 375, 768, 1024 e 1440 px. Foram verificados os carrosséis, a paginação sem repetição, os estados de favoritos, o player integrado e a continuidade do áudio sintético ao rolar e navegar. Autoplay permitido e bloqueado foram exercitados com configurações de teste. A navegação incluiu conta, cadastro, edição, widget e fila do WordPress, documentos legais, login e recuperação de senha.
+
+O preview integrado desta auditoria está no loopback `http://127.0.0.1:8174/` enquanto o Apache local estiver ativo. A inspeção do site público foi somente de leitura. A publicação desta revisão, a configuração específica da HostGator e os streams reais permanecem fora da validação local.
+
+## Publicação 2.1.0
+
+Use o release unificado e o [guia de instalação em produção](instalacao-hostgator.md). O pacote contém as definições finais com cadastro e indexação habilitados. Os exemplos com flags desligadas acima correspondem à preparação histórica e à homologação. Em produção, o roteamento PHP aplica os metadados das páginas públicas e mantém as rotas privadas fora do índice.

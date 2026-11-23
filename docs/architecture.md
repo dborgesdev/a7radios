@@ -78,3 +78,11 @@ Dois proprietários A/B e um admin em base de homologação; acesso por IDs cruz
 - A imagem de revisão no painel é obtida pelo frontend com nonce REST em cabeçalho. A API confere titularidade, snapshot atual e asset, e serve a imagem com `no-store`.
 - O endpoint de visita continua em HTTP 204 e devolve a contagem no cabeçalho `X-A7-Visit-Count`. O controle de deduplicação da V1 permanece.
 - O editor de documentos usa um subconjunto de Markdown com títulos, negrito, itálico, listas, código inline e links HTTP(S). PHP compartilha o renderizador entre prévia administrativa, API e HTML inicial. Textos legados preservam a apresentação em texto simples. A publicação exige confirmação e uma base vigente e guarda uma nova versão automática com histórico imutável. O banco precisa permitir locks de sessão `GET_LOCK` para serializar publicações e decisões.
+
+## Refinamento Broadcast Premium
+
+- A paginação usa o mesmo limite de 24 em todas as larguras. Aumentar ou diminuir colunas não altera offsets.
+- O player integrado observa sua própria visibilidade abaixo do cabeçalho fixo e usa o estado do provedor de áudio. A barra flutuante é desmontada enquanto o player integrado está visível.
+- A associação de sugestão de categoria é armazenada na proposta de rádio, validada contra o titular, e resolvida antes da publicação. Um lock por sugestão coordena a decisão na fila geral e na revisão individual. A categoria é administrada separadamente do snapshot. Uma corrida na versão da rádio pode exigir nova aprovação da rádio depois de a resolução da categoria já ter sido registrada.
+- A edição administrativa reutiliza a validação de campos e o processamento de imagens. Campos, versão publicada, histórico e projeções de busca mudam com a mesma operação condicional de sequência e versão. Ações em lote mantêm resultado individual e podem terminar parcialmente.
+- O pedido autenticado é identificado pela conta e rádio, com chave única no banco. O formulário usa nonce REST. O endpoint privado verifica titularidade e entrega o status sem cache. A fila conserva a decisão conforme a política já definida para pedidos de remoção.

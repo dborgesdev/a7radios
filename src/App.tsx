@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
+import { PageHero } from './components/PageHero'
 import { Layout } from './components/Layout'
 import { Home } from './pages/Home'
 import { Catalog } from './pages/Catalog'
@@ -45,6 +46,6 @@ export function App({ initial }: { initial?: Radio }) {
       <Route path="radios/nova/" element={<RadioForm />} />
       <Route path="radios/:id/editar/" element={<RadioForm />} />
     </Route>
-    <Route path="*" element={<div className="shell page"><h1>Página indisponível</h1><Link to="/radios/">Ver catálogo</Link></div>} />
+    <Route path="*" element={<PageHero variant="error" eyebrow="A7 Rádios On-Line" title="Página indisponível" action={<Link className="button primary" to="/radios/">Ver catálogo</Link>} />} />
   </Route></Routes>
 }

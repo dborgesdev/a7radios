@@ -1,43 +1,60 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useId, useRef, useState, type FormEvent } from 'react'
 import { api } from '../api'
+import { useAuth } from '../auth'
+import type { OwnRadio } from '../domain'
 
-export function RemovalRequest({ id }: { id: number }) {
+export function RemovalRequest({ id, name, owner = false, status }: {
+  id: number; name: string; owner?: boolean; status?: OwnRadio['removalStatus']
+}) {
+  const { value, error } = useAuth()
+  const titleId = useId()
   const dialog = useRef<HTMLDialogElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [sent, setSent] = useState(false)
+  const authenticated = !!value?.authenticated
+  const current = sent ? 'pending' : status
+  const labels = { pending: 'Pedido de remoção em análise', approved: 'Remoção aprovada', rejected: 'Pedido de remoção rejeitado' }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy) return
+    if (busy || (!value && !error) || (authenticated && !value?.nonce)) return
     setBusy(true)
     setMessage('')
     try {
-      const result = await api<{ message: string }>('/radios/' + id + '/removal', {
+      const result = await api<{ message: string }>((owner ? '/me' : '') + '/radios/' + id + '/removal', {
         method: 'POST', body: new FormData(event.currentTarget),
+        headers: value?.nonce ? { 'X-WP-Nonce': value.nonce } : undefined,
       })
       setSent(true)
       setMessage(result.message)
-    } catch (error) {
-      setMessage((error as Error).message)
+    } catch (failure) {
+      setMessage((failure as Error).message)
     } finally {
       setBusy(false)
     }
   }
 
   return <>
-    <button type="button" className="button secondary" onClick={() => dialog.current?.showModal()}>Solicitar remoção</button>
-    <dialog className="document-dialog" aria-labelledby="removal-title" ref={dialog}>
-      <h2 id="removal-title">Solicitar remoção</h2>
-      <p>A equipe usará seu contato para avaliar o pedido. Consulte a <a href="/privacidade/">Política de Privacidade</a>.</p>
-      {!sent && <form className="form" onSubmit={submit}>
-        <label>Nome<input name="name" autoComplete="name" maxLength={100} required /></label>
-        <label>E-mail<input name="email" type="email" autoComplete="email" maxLength={254} required /></label>
-        <label>Motivo<input name="reason" maxLength={200} required /></label>
-        <label>Informações que fundamentam o pedido<textarea name="evidence" maxLength={3000} rows={4} required /></label>
-        <button className="button primary" disabled={busy}>{busy ? 'Enviando…' : 'Enviar pedido'}</button>
-      </form>}
-      {message && <p role={sent ? 'status' : 'alert'}>{message}</p>}
+    <button ref={trigger} type="button" className="button secondary" onClick={() => dialog.current?.showModal()}
+      aria-haspopup="dialog">{current ? labels[current] : 'Solicitar remoção'}</button>
+    <dialog className="document-dialog" aria-labelledby={titleId} ref={dialog} onClose={() => trigger.current?.focus()}>
+      <h2 id={titleId}>Solicitar remoção</h2>
+      <p className="removal-station">{name}</p>
+      <p>O pedido será analisado pela moderação. Consulte a <a href="/privacidade/">Política de Privacidade</a>.</p>
+      {current ? <p role="status">{message || labels[current]}</p> : !value && !error ? <p role="status">Verificando sessão…</p> :
+        <form className="form" onSubmit={submit}>
+          {!authenticated && <>
+            <label>Nome<input name="name" autoComplete="name" maxLength={100} required /></label>
+            <label>E-mail<input name="email" type="email" autoComplete="email" maxLength={254} required /></label>
+          </>}
+          <label>Motivo<input name="reason" maxLength={200} required /></label>
+          <label>Informações que fundamentam o pedido{authenticated ? ' (opcional)' : ''}
+            <textarea name="evidence" maxLength={3000} rows={4} required={!authenticated} /></label>
+          {message && <p role="alert">{message}</p>}
+          <button className="button primary" disabled={busy}>{busy ? 'Enviando…' : 'Enviar pedido'}</button>
+        </form>}
       <button type="button" className="button secondary" onClick={() => dialog.current?.close()}>Fechar</button>
     </dialog>
   </>
