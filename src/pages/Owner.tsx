@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AudioLines, Check, Clock3, Plus, XCircle } from 'lucide-react'
-import { Link, Navigate, Outlet } from 'react-router-dom'
+import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useApi } from '../api'
 import { useAuth } from '../auth'
 import { OwnerRadioImage } from '../components/OwnerRadioImage'
@@ -17,7 +17,7 @@ export function OwnerLayout() {
   if (!value.authenticated) return <Navigate to="/login/" replace />
   return <>
     <nav className="shell actions owner-nav" aria-label="Painel">
-      <Link to="/painel/">Minha conta</Link>
+      <div className="actions"><NavLink to="/painel/" end>Minhas rádios</NavLink><NavLink to="/painel/dados/">Dados cadastrais</NavLink></div>
       <button type="button" className="button secondary" disabled={busy} onClick={async () => {
         setBusy(true); setFailure('')
         try { await send('logout') } catch (error) { setFailure((error as Error).message) } finally { setBusy(false) }

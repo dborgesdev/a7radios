@@ -20,13 +20,13 @@ export function RadioCards({ radios, compactLocation = false, shelf }: { radios:
   const { label, ...track } = shelf ?? {}
   return <ul {...track} className={shelf ? 'radio-grid radio-track' : 'radio-grid'} tabIndex={shelf ? 0 : undefined} aria-label={label}>
     {radios.map((radio, index) => <li className="radio-card" key={radio.id} style={{ '--delay': Math.min(index, 9) * 35 + 'ms' } as CSSProperties}>
-      <div className="cover-wrap"><Link tabIndex={-1} aria-hidden="true" to={radioPath(radio.slug)}><Cover radio={radio} /></Link>
-        <FavoriteButton slug={radio.slug} compact /></div>
+      <div className="cover-wrap"><Cover radio={radio} />
+        <FavoriteButton slug={radio.slug} compact />
       <div className="card-info"><p className="eyebrow">{radio.category.name}</p>
         <h3><Link to={radioPath(radio.slug)}>{radio.name}</Link></h3>
         <p className="muted location">{compactLocation ? [radio.region, radio.country].filter(Boolean).join(', ') : locationLabel(radio)}</p>
         {radio.streamUrl ? <PlayButton radio={radio} queue={radios} compact /> : <Link className="play-icon" aria-label={'Ver ' + radio.name} to={radioPath(radio.slug)}><AudioLines size={19} /></Link>}
-      </div>
+      </div></div>
     </li>)}
   </ul>
 }

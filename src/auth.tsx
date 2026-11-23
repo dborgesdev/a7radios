@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { auth, session } from './api'
 import type { Session } from './domain'
 
-type AuthState = { value?: Session; error?: string; send: (action: string, data?: FormData) => Promise<string> }
+type AuthState = { value?: Session; error?: string; refresh: () => Promise<void>; send: (action: string, data?: FormData) => Promise<string> }
 const Auth = createContext<AuthState | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -14,13 +14,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((failure: Error) => { if (active) setError(failure.message) })
     return () => { active = false }
   }, [])
+  async function refresh() { setValue(await session()) }
   async function send(action: string, data = new FormData()) {
     data.set('csrf', value?.csrf ?? '')
     const result = await auth(action, data)
-    setValue(await session())
+    if (action === 'login' || action === 'logout') await refresh()
     return result.message
   }
-  return <Auth.Provider value={{ value, error, send }}>{children}</Auth.Provider>
+  return <Auth.Provider value={{ value, error, send, refresh }}>{children}</Auth.Provider>
 }
 
 export function useAuth() { return useContext(Auth)! }

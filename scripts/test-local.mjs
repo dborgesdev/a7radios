@@ -51,10 +51,28 @@ async function action(browser, name, fields, expected = 200) {
   }), expected)
 }
 
+const ownerPassword = 'A7!qa-' + randomUUID()
+
+async function confirmation(browser, address) {
+  const digest = createHash('sha256').update(address.toLowerCase()).digest('hex')
+  const message = await readFile('.local/mail/' + digest + '.txt', 'utf8')
+  const link = new URL(message.trim().split(/\s+/).at(-1))
+  assert.equal(link.origin, origin)
+  assert.equal(link.pathname, '/confirmar-email/')
+  assert.equal(link.search, '')
+  const token = link.hash.slice(1)
+  await verify(await browser.request(link.pathname), 200)
+  await action(browser, 'confirm', { token })
+  await action(browser, 'confirm', { token }, 400)
+}
+
 async function owner(label) {
   const browser = client()
-  const credentials = { email: 'a7-' + label + '-' + suffix + '@example.test', password }
+  const credentials = { email: 'a7-' + label + '-' + suffix + '@example.test', password: ownerPassword }
   await action(browser, 'register', { ...credentials, name: 'DEMO ' + label })
+  await action(browser, 'login', credentials, 403)
+  await action(browser, 'register', { ...credentials, name: 'Tentativa duplicada' }, 409)
+  await confirmation(browser, credentials.email)
   await action(browser, 'login', credentials)
   const response = await browser.request(ajax + 'session')
   assert.match(response.headers.get('cache-control'), /no-store/)
@@ -69,6 +87,18 @@ const admin = client()
 const ownerA = await owner('A')
 const ownerB = await owner('B')
 await action(admin, 'login', { email, password })
+await action(anon, 'register', { email: suffix + '@mail-failure.example.com', name: 'Falha de e-mail', password: ownerPassword }, 503)
+await action(anon, 'confirm', { token: 'inválido' }, 400)
+const profileHeaders = { 'X-WP-Nonce': ownerA.nonce }
+const newEmail = 'a7-updated-' + suffix + '@example.test'
+const pending = await json(await ownerA.request(rest + '/me/profile', { method: 'POST', headers: profileHeaders,
+  body: form({ name: 'Novo Nome', email: newEmail }) }), 200)
+assert.equal(pending.name, 'Novo Nome')
+assert.equal(pending.email, ownerA.email)
+assert.equal(pending.pendingEmail, newEmail)
+await confirmation(anon, newEmail)
+assert.equal((await json(await ownerA.request(rest + '/me/profile', { headers: profileHeaders }), 200)).email, newEmail)
+console.log('OK confirmação única, duplicidade, falha de envio e troca de e-mail preservando o anterior até confirmação')
 await action(anon, 'recover', { email: 'a7-unknown-' + suffix + '@example.test' })
 await verify(await anon.request(ajax + 'login', { method: 'POST', body: form({ email, password }) }), 403)
 const cleanPanel = await anon.request('/painel/')
@@ -273,7 +303,16 @@ else {
   await verify(await anon.request(page), 404)
   await verify(await anon.request(replacementImage.api), 404)
   assert.ok(!(await verify(await anon.request('/sitemap.xml'), 200)).includes(radio.slug))
-  console.log('OK arquivamento retira página e sitemap')
+  const deletion = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r&view=delete&radio=' + radio.id), 200)
+  const deleteNonce = deletion.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
+  const deleteSequence = deletion.match(/name="sequence" value="([^"]+)"/)?.[1]
+  const deleteForm = { action: 'a7r_delete_radio', id: radio.id, sequence: deleteSequence, _wpnonce: deleteNonce }
+  await verify(await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: form(deleteForm) }), 422)
+  await verify(await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: form({ ...deleteForm, confirmDelete: 1 }) }), 303)
+  await verify(await ownerA.request(privatePath, { headers }), 404)
+  await verify(await anon.request(page), 404)
+  assert.ok(!(await verify(await anon.request('/sitemap.xml'), 200)).includes(radio.slug))
+  console.log('OK arquivamento e exclusão individual com confirmação, 404 e sitemap atualizado')
 }
 if (!process.env.A7_KEEP_DEMO) {
   const category = 'Categoria DEMO ' + suffix
@@ -306,6 +345,13 @@ if (!process.env.A7_KEEP_DEMO) {
   assert.equal((await json(await anon.request(rest + '/radios/' + linked.slug), 200)).category.name, normalized)
   assert.equal((await privateCategories()).some(item => item.name === normalized), true)
   assert.match(await bulk('approve', ''), /A versão mudou/)
+  const all = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r&status=all&s=' + linked.id), 200)
+  const allNonce = all.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
+  const deleteSelection = all.match(/name="selected\[\]" value="([^"]+)"/)?.[1]
+  const batchDelete = form({ action: 'a7r_bulk', _wpnonce: allNonce, decision: 'delete', confirmDelete: 1, filter: 'all' })
+  batchDelete.append('selected[]', deleteSelection)
+  await verify(await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: batchDelete }), 303)
+  await verify(await anon.request('/radio/' + linked.slug + '/'), 404)
   const dashboard = await verify(await admin.request('/app/wp-admin/index.php'), 200)
   assert.match(dashboard, /id="a7r_overview"/)
   console.log('OK sugestões de categorias, solicitações de remoção e widget administrativo')
@@ -321,11 +367,11 @@ const mail = await readFile('.local/mail/' + digest + '.txt', 'utf8')
 const link = new URL(mail.trim().split(/\s+/).at(-1))
 assert.equal(link.origin, origin)
 assert.equal(link.pathname, '/recuperar-senha/')
-const replacement = randomUUID()
+const replacement = 'A7!reset-' + randomUUID()
 await action(anon, 'reset', {
   key: link.searchParams.get('key'), login: link.searchParams.get('login'), password: replacement,
 })
-await action(anon, 'login', { email: ownerB.email, password }, 401)
+await action(anon, 'login', { email: ownerB.email, password: ownerPassword }, 401)
 await action(anon, 'login', { email: ownerB.email, password: replacement })
 await action(anon, 'logout', {})
 await action(anon, 'reset', {

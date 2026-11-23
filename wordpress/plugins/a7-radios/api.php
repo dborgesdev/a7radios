@@ -14,6 +14,8 @@ function register_api(): void {
         ['/categories', 'GET', 'public_categories', '__return_true'],
         ['/discovery', 'GET', 'discovery', '__return_true'],
         ['/me/radios/(?P<id>\d+)/removal', 'POST', 'request_removal', __NAMESPACE__ . '\write_permission'],
+        ['/me/profile', 'GET', 'owner_profile', __NAMESPACE__ . '\owner_permission'],
+        ['/me/profile', 'POST', 'update_profile', __NAMESPACE__ . '\write_permission'],
         ['/me/categories', 'GET', 'category_options', __NAMESPACE__ . '\owner_permission'],
         ['/me/submission-settings', 'GET', static fn() => ['remoteImages' => remote_images_enabled(), 'terms' => public_document('terms')], __NAMESPACE__ . '\owner_permission'],
         ['/terms', 'GET', static fn() => public_document('terms'), '__return_true'],

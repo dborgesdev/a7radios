@@ -73,11 +73,25 @@ function request_removal(\WP_REST_Request $request): \WP_REST_Response|\WP_Error
     $evidence = $owner && ($raw === null || (is_string($raw) && trim($raw) === '')) ? '' : request_text($request, 'evidence', 3000, true);
     if (is_wp_error($evidence)) return $evidence;
     $data['evidence'] = $evidence;
-    if (!save_request('removal', $key, $data)) {
+    if (!save_removal_request($id, $key, $data)) {
         if ($owner && request_record('removal', $key)) return err('Esta conta já solicitou a remoção desta Rádio.', 409);
         return err('Não foi possível registrar o pedido.', 503);
     }
     return new \WP_REST_Response(['message' => 'Pedido enviado para análise.', 'status' => 'pending'], 201);
+}
+
+function save_removal_request(int $id, string $key, array $data): bool {
+    global $wpdb;
+    $table = table();
+    if (false === $wpdb->query('START TRANSACTION')) return false;
+    $saved = false;
+    try {
+        $status = $wpdb->get_var($wpdb->prepare("SELECT status FROM $table WHERE id = %d FOR UPDATE", $id));
+        $saved = $status === 'approved' && save_request('removal', $key, $data) && false !== $wpdb->query('COMMIT');
+        return $saved;
+    } finally {
+        if (!$saved) $wpdb->query('ROLLBACK');
+    }
 }
 
 function pending_requests(string $type, int $limit, int $offset = 0): array {

@@ -32,6 +32,7 @@ function moderation_page(): void {
     if ($notice) delete_transient('a7r_bulk_' . get_current_user_id());
     ?>
     <div class="wrap a7r-admin"><h1>A7 Rádios</h1>
+    <?php if ($id && ($_GET['saved'] ?? '') === '1'): ?><div class="notice notice-success"><p>Correções administrativas salvas.</p></div><?php endif; ?>
     <?php if ($notice): ?><div class="notice notice-info"><p><strong>Resultado da moderação em lote</strong></p><ul>
         <?php foreach ($notice as $line): ?><li><?= esc_html($line) ?></li><?php endforeach; ?>
     </ul></div><?php endif; ?>
@@ -45,6 +46,7 @@ function moderation_page(): void {
     <?php if ($id):
         $row = row_by_id($id);
         if (!$row) echo '<p>Rádio indisponível.</p>';
+        elseif (($_GET['view'] ?? '') === 'delete' && can_delete_radio()) deletion_panel($row);
         elseif (($_GET['view'] ?? '') === 'edit' && $row['status'] !== 'archived') manual_edit_panel($row);
         else review_panel($row);
     else:
@@ -79,9 +81,10 @@ function moderation_page(): void {
             <input type="hidden" name="search" value="<?= esc_attr($search) ?>">
             <div class="a7r-bulk-tools">
                 <label>Ação em lote <select name="decision" required><option value="">Selecione</option>
-                    <option value="approve">Aprovar</option><option value="reject">Rejeitar</option><option value="archive">Arquivar</option></select></label>
+                    <option value="approve">Aprovar</option><option value="reject">Rejeitar</option><option value="archive">Arquivar</option><?php if (can_delete_radio()): ?><option value="delete">Excluir rádio</option><?php endif; ?></select></label>
                 <label>Motivo para rejeitar ou arquivar <input name="reason" maxlength="500"></label>
                 <label><input type="checkbox" name="confirmArchive" value="1"> Confirmo o arquivamento</label>
+                <?php if (can_delete_radio()): ?><label><input type="checkbox" name="confirmDelete" value="1"> Confirmo a exclusão definitiva</label><?php endif; ?>
                 <button class="button button-primary" <?= !$rows ? 'disabled' : '' ?>>Aplicar</button>
             </div>
             <div class="a7r-table-scroll"><table class="widefat striped"><thead><tr>
@@ -93,7 +96,7 @@ function moderation_page(): void {
                 $owner = get_userdata((int) $row['owner']);
                 $url = admin_url('admin.php?page=a7r&radio=' . $row['id']); ?>
                 <tr>
-                    <td><input type="checkbox" data-a7r-row name="selected[]" value="<?= esc_attr($row['id'] . ':' . $row['sequence']) ?>" aria-label="<?= esc_attr('Selecionar ' . $revision['fields']['name']) ?>" <?= $row['status'] === 'archived' ? 'disabled' : '' ?>></td>
+                    <td><input type="checkbox" data-a7r-row name="selected[]" value="<?= esc_attr($row['id'] . ':' . $row['sequence']) ?>" aria-label="<?= esc_attr('Selecionar ' . $revision['fields']['name']) ?>" <?= $row['status'] === 'archived' && !can_delete_radio() ? 'disabled' : '' ?>></td>
                     <td><div class="a7r-radio-cell"><?php review_value($row, 'asset', $revision['fields']['asset'], true); ?>
                         <div><a class="a7r-radio-title" href="<?= esc_url($url) ?>"><?= esc_html($revision['fields']['name']) ?></a>
                         <?php if (isset($revision['categorySuggestion'])): ?><small>Sugestão: <?= esc_html($revision['categorySuggestion']['name']) ?></small><?php endif; ?></div></div></td>
@@ -103,6 +106,7 @@ function moderation_page(): void {
                     <td><?= esc_html($row['submitted_at']) ?></td>
                     <td class="a7r-row-actions"><a class="button <?= $row['pending'] ? 'button-primary' : '' ?>" href="<?= esc_url($url) ?>"><?= $row['pending'] ? 'Analisar' : 'Ver detalhes' ?></a>
                     <?php if ($row['status'] !== 'archived'): ?><a class="button" href="<?= esc_url(add_query_arg('view', 'edit', $url)) ?>">Editar</a><?php endif; ?>
+                    <?php if (can_delete_radio()): ?><a class="button a7r-danger-button" href="<?= esc_url(add_query_arg('view', 'delete', $url)) ?>">Excluir rádio</a><?php endif; ?>
                     <?php if ($row['status'] === 'approved'): ?><a class="button" href="<?= esc_url(radio_url($row['slug'])) ?>" target="_blank" rel="noopener noreferrer">Ver Rádio</a><?php endif; ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -120,11 +124,12 @@ function bulk_action(): void {
     check_admin_referer('a7r_bulk');
     $selected = $_POST['selected'] ?? [];
     $decision = form_value('decision');
+    if ($decision === 'delete' && !can_delete_radio()) wp_die('Acesso negado.', '', ['response' => 403]);
     $reason = sanitize_textarea_field(form_value('reason'));
     if (!is_array($selected) || !$selected || count($selected) > 30 ||
-        !in_array($decision, ['approve', 'reject', 'archive'], true) || strlen($reason) > 2000 ||
-        ($decision !== 'approve' && $reason === '') || ($decision === 'archive' && form_value('confirmArchive') !== '1')) {
-        wp_die('Selecione as rádios e a ação. Informe o motivo para rejeitar ou arquivar e confirme o arquivamento.', '', ['response' => 422, 'back_link' => true]);
+        !in_array($decision, ['approve', 'reject', 'archive', 'delete'], true) || strlen($reason) > 2000 ||
+        (in_array($decision, ['reject', 'archive'], true) && $reason === '') || ($decision === 'delete' && form_value('confirmDelete') !== '1') || ($decision === 'archive' && form_value('confirmArchive') !== '1')) {
+        wp_die('Selecione as rádios e a ação. Informe o motivo para rejeitar ou arquivar. Confirme operações de arquivamento e exclusão.', '', ['response' => 422, 'back_link' => true]);
     }
     $results = [];
     foreach ($selected as $pair) {
@@ -133,7 +138,8 @@ function bulk_action(): void {
             continue;
         }
         $row = row_by_id((int) $match[1]);
-        $result = $row ? moderate($row, (int) $match[2], $decision, $reason, get_current_user_id()) : err('Rádio indisponível.', 404);
+        $result = $decision === 'delete' ? delete_radio((int) $match[1], (int) $match[2])
+            : ($row ? moderate($row, (int) $match[2], $decision, $reason, get_current_user_id()) : err('Rádio indisponível.', 404));
         $results[] = 'Rádio #' . $match[1] . ' · ' . (is_wp_error($result) ? $result->get_error_message() : 'Decisão registrada.');
     }
     set_transient('a7r_bulk_' . get_current_user_id(), $results, 60);
@@ -145,32 +151,52 @@ function manual_edit_panel(array $row): void {
     $data = state($row);
     $fields = $data['published'] ?? $data['revision']['fields'];
     ?>
-    <h2>Edição administrativa · <?= esc_html($fields['name']) ?></h2>
+    <div class="a7r-edit-heading"><div><h2><?= esc_html($fields['name']) ?></h2><span class="a7r-badge a7r-<?= esc_attr($row['status']) ?>"><?= esc_html(status_name($row['status'])) ?></span></div><p>Edição administrativa</p></div>
     <p><?= $row['version'] ? 'As correções formarão uma nova versão pública.' : 'A proposta corrigida ficará disponível na fila de aprovação.' ?></p>
-    <form method="post" enctype="multipart/form-data" action="<?= esc_url(admin_url('admin-post.php')) ?>">
+    <form class="a7r-edit-form" method="post" enctype="multipart/form-data" action="<?= esc_url(admin_url('admin-post.php')) ?>">
         <?php wp_nonce_field('a7r_manual_' . $row['id']); ?>
         <input type="hidden" name="action" value="a7r_manual_edit">
         <input type="hidden" name="id" value="<?= esc_attr($row['id']) ?>">
         <input type="hidden" name="sequence" value="<?= esc_attr($row['sequence']) ?>">
-        <div class="a7r-edit-fields">
+        <fieldset class="a7r-edit-section"><legend>Identificação</legend><div class="a7r-edit-fields">
             <label>Nome da rádio <input name="name" value="<?= esc_attr($fields['name']) ?>" maxlength="100" required></label>
             <label>Categoria <select name="categoryId" required><option value="">Selecione</option>
                 <?php foreach (category_options() as $category): ?><option value="<?= esc_attr($category['id']) ?>" <?php selected($fields['categoryId'], $category['id']); ?>><?= esc_html($category['name']) ?></option><?php endforeach; ?>
             </select></label>
-            <?php foreach (['country' => 'País', 'region' => 'Estado/região', 'city' => 'Cidade', 'streamUrl' => 'Streaming HTTPS', 'websiteUrl' => 'Site oficial', 'appDownloadUrl' => 'URL do App'] as $key => $label):
+            <?php foreach (['country' => 'País', 'region' => 'Estado/região', 'city' => 'Cidade'] as $key => $label):
                 $is_url = str_ends_with($key, 'Url'); ?>
                 <label><?= esc_html($label) ?><input type="<?= $is_url ? 'url' : 'text' ?>" name="<?= esc_attr($key) ?>" maxlength="<?= $is_url ? 2000 : ($key === 'city' ? 100 : 80) ?>" value="<?= esc_attr($fields[$key] ?? '') ?>" <?= in_array($key, ['country', 'streamUrl'], true) ? 'required' : '' ?>></label>
             <?php endforeach; ?>
-            <label>Nova imagem (opcional) <input type="file" name="image" accept="image/png,image/jpeg,image/webp"></label>
-        </div>
+        </div></fieldset>
+        <fieldset class="a7r-edit-section"><legend>Transmissão e links</legend><div class="a7r-edit-fields">
+            <?php foreach (['streamUrl' => 'URL do streaming', 'websiteUrl' => 'Website oficial', 'appDownloadUrl' => 'URL do aplicativo'] as $key => $label): ?>
+                <label><?= esc_html($label) ?><input type="url" name="<?= esc_attr($key) ?>" maxlength="2000" value="<?= esc_attr($fields[$key] ?? '') ?>" <?= $key === 'streamUrl' ? 'required' : '' ?>></label>
+            <?php endforeach; ?>
+        </div></fieldset>
+        <fieldset class="a7r-edit-section"><legend>Apresentação</legend>
+            <div class="a7r-current-art"><?php review_value($row, 'asset', $fields['asset']); ?>
+            <label>Substituir a imagem<input type="file" name="image" accept="image/png,image/jpeg,image/webp">
+                <small>PNG, JPG ou WebP, até 5 MB.</small></label></div>
         <p><label>Descrição <textarea class="large-text" name="description" maxlength="2000" rows="4" required><?= esc_textarea($fields['description']) ?></textarea></label></p>
+        </fieldset><fieldset class="a7r-edit-section"><legend>Administração</legend>
         <p><label>Justificativa <textarea class="large-text" name="reason" maxlength="500" rows="2" required></textarea></label></p>
         <?php if ($row['version'] && $row['pending']): ?>
             <p><label><input type="checkbox" name="confirmSupersede" value="1" required> Confirmo que a revisão pendente será encerrada para preservar as correções administrativas.</label></p>
         <?php endif; ?>
-        <button class="button button-primary">Salvar correções</button>
+        </fieldset><button class="button button-primary">Salvar correções</button>
         <a class="button" href="<?= esc_url(admin_url('admin.php?page=a7r&radio=' . $row['id'])) ?>">Cancelar</a>
     </form>
+    <form method="post" action="<?= esc_url(admin_url('admin-post.php')) ?>">
+        <?php wp_nonce_field('a7r_decide_' . $row['id']); ?>
+        <input type="hidden" name="action" value="a7r_decide">
+        <input type="hidden" name="id" value="<?= esc_attr($row['id']) ?>">
+        <input type="hidden" name="sequence" value="<?= esc_attr($row['sequence']) ?>">
+        <h2>Arquivar rádio</h2>
+        <p><label>Motivo <input name="reason" maxlength="500" required></label></p>
+        <p><label><input type="checkbox" name="confirmArchive" value="1" required> Confirmo o arquivamento.</label></p>
+        <button class="button" name="decision" value="archive">Arquivar</button>
+    </form>
+    <?php deletion_panel($row); ?>
     <?php
 }
 
@@ -223,7 +249,7 @@ function manual_edit_action(): void {
         if ($asset !== $previous) remove_unreferenced_image($asset);
         wp_die('A rádio mudou. A edição não foi aplicada.', '', ['response' => 409, 'back_link' => true]);
     }
-    wp_safe_redirect(admin_url('admin.php?page=a7r&radio=' . $id), 303);
+    wp_safe_redirect(admin_url('admin.php?page=a7r&saved=1&radio=' . $id), 303);
     exit;
 }
 

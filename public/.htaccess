@@ -14,7 +14,7 @@ RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
 RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
-RewriteRule ^(?:radio/[a-z0-9-]{1,180}/?|sitemap(?:-[0-9]+)?\.xml|robots\.txt|radios/?|favoritos/?|login/?|cadastro/?|recuperar-senha/?|termos/?|privacidade/?|painel(?:/radios(?:/nova|/[0-9]+/editar)?)?/?)$ app/index.php [L]
+RewriteRule ^(?:radio/[a-z0-9-]{1,180}/?|sitemap(?:-[0-9]+)?\.xml|robots\.txt|radios/?|favoritos/?|login/?|cadastro/?|confirmar-email/?|recuperar-senha/?|termos/?|privacidade/?|painel(?:/dados|/radios(?:/nova|/[0-9]+/editar)?)?/?)$ app/index.php [L]
 
 <IfModule mod_headers.c>
   <FilesMatch "^.+-[A-Za-z0-9_-]{8}\.(?:js|css|woff2|webp|png|jpe?g|svg)$">

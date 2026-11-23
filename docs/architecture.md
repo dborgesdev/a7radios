@@ -86,3 +86,11 @@ Dois proprietários A/B e um admin em base de homologação; acesso por IDs cruz
 - A associação de sugestão de categoria é armazenada na proposta de rádio, validada contra o titular, e resolvida antes da publicação. Um lock por sugestão coordena a decisão na fila geral e na revisão individual. A categoria é administrada separadamente do snapshot. Uma corrida na versão da rádio pode exigir nova aprovação da rádio depois de a resolução da categoria já ter sido registrada.
 - A edição administrativa reutiliza a validação de campos e o processamento de imagens. Campos, versão publicada, histórico e projeções de busca mudam com a mesma operação condicional de sequência e versão. Ações em lote mantêm resultado individual e podem terminar parcialmente.
 - O pedido autenticado é identificado pela conta e rádio, com chave única no banco. O formulário usa nonce REST. O endpoint privado verifica titularidade e entrega o status sem cache. A fila conserva a decisão conforme a política já definida para pedidos de remoção.
+
+## Contas confirmadas e exclusão definitiva
+
+O registro pendente fica em opções sem autoload e não possui sessão nem conta WordPress. Um lock por endereço coordena o cadastro, o reenvio e a confirmação. Confirmações de alteração também são serializadas por conta. A autenticação continua nativa. O fragmento do link é enviado ao backend em POST de mesma origem. O cadastro e o reenvio possuem limites por IP e por endereço.
+
+A exclusão serializa o acesso à estação e aos pedidos de remoção vinculados. O catálogo, o sitemap e as páginas consultam os registros publicados atuais. Para extensões de cache, o hook `a7r_radio_deleted` informa ID e slug depois do commit.
+
+O endpoint de estatísticas utilizado no repositório Geração Vinil FM devolveu HTTP 200 sem oferecer CORS à origem do portal. O repositório A7 Jovem Guarda FM não consulta metadados. O player do portal usa as trilhas nativas disponíveis após `playing` e cancela os listeners ao pausar ou trocar de rádio. Ambos os modos exibem a mesma informação, com a identidade da rádio como fallback.

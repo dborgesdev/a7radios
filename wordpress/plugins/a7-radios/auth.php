@@ -2,7 +2,7 @@
 namespace A7Radios;
 defined('ABSPATH') || exit;
 
-foreach (['session', 'login', 'register', 'recover', 'reset', 'logout'] as $action) {
+foreach (['session', 'login', 'register', 'recover', 'reset', 'logout', 'confirm', 'resend'] as $action) {
     add_action('wp_ajax_a7r_' . $action, __NAMESPACE__ . '\\ajax_' . $action);
     add_action('wp_ajax_nopriv_a7r_' . $action, __NAMESPACE__ . '\\ajax_' . $action);
 }
@@ -61,34 +61,57 @@ function ajax_login(): void {
     if (!is_email($email) || strlen($password) > 512 || !permit('login-account', strtolower($email), 12, 900)) {
         fail_ajax('E-mail ou senha inválidos.', 401);
     }
+    $pending_key = 'a7r_confirmation_r.' . hash_hmac('sha256', strtolower($email), wp_salt('nonce'));
+    $pending = get_option($pending_key);
+    if (!email_exists($email) && is_array($pending) && wp_check_password($password, $pending['passwordHash'])) {
+        reply_account(err('Confirme seu e-mail antes de entrar.', 403, 'email'));
+    }
     $user = wp_signon(['user_login' => $email, 'user_password' => $password, 'remember' => false], is_ssl());
     if (is_wp_error($user)) fail_ajax('E-mail ou senha inválidos.', 401);
     wp_send_json(['message' => 'Sessão iniciada.']);
 }
 
+function reply_account(array|\WP_Error $result): never {
+    if (is_wp_error($result)) wp_send_json(['message' => $result->get_error_message(), 'data' => $result->get_error_data()], $result->get_error_data()['status']);
+    wp_send_json($result);
+}
+
 function ajax_register(): void {
     auth_gate('register', 6);
     if (!registration_enabled()) fail_ajax('Cadastro indisponível.', 403);
-    $email = sanitize_email(form_value('email'));
+    $email = trim(form_value('email'));
     $name = sanitize_text_field(form_value('name'));
     $password = form_value('password');
-    if (!is_email($email) || strlen($email) > 100 || !$name || strlen($name) > 240 || !valid_password($password)) {
-        fail_ajax('Confira o nome, e-mail e a senha de pelo menos 12 caracteres.', 422);
-    }
-    if (permit('register-account', strtolower($email), 1, 900) && !email_exists($email)) {
-        $created = wp_insert_user([
-            'user_login' => 'a7r_' . bin2hex(random_bytes(12)), 'user_email' => $email,
-            'user_pass' => $password, 'display_name' => $name, 'role' => 'a7r_owner',
-        ]);
-        if (is_wp_error($created) && $created->get_error_code() !== 'existing_user_email') {
-            fail_ajax('Cadastro temporariamente indisponível.', 503);
-        }
-    }
-    wp_send_json(['message' => 'Se o cadastro estiver disponível para este e-mail, você já pode entrar.']);
+    if (!valid_email_input($email)) reply_account(err('Informe um e-mail válido.', 422, 'email'));
+    if (!$name || !preg_match('/^.{1,80}$/usD', $name)) reply_account(err('Informe o nome público com até 80 caracteres.', 422, 'name'));
+    if ($failure = password_error($password)) reply_account(err($failure, 422, 'password'));
+    reply_account(registration_confirmation($email, $name, $password));
 }
 
-function valid_password(string $password): bool {
-    return strlen($password) >= 12 && strlen($password) <= 128 && trim($password) === $password;
+function ajax_resend(): void {
+    auth_gate('resend', 5);
+    if (!registration_enabled()) fail_ajax('Cadastro indisponível.', 403);
+    $email = trim(form_value('email'));
+    if (!valid_email_input($email)) reply_account(err('Informe um e-mail válido.', 422, 'email'));
+    reply_account(registration_confirmation($email));
+}
+
+function ajax_confirm(): void {
+    no_store();
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !same_origin() || !permit('auth:confirm', ip(), 20, 900)) {
+        fail_ajax('A confirmação está indisponível. Aguarde e tente novamente.', 403);
+    }
+    reply_account(confirm_address(form_value('token')));
+}
+
+function password_error(string $password): ?string {
+    if (!preg_match('/^.{8,128}$/usD', $password) || strlen($password) > 512) return 'Use de 8 a 128 caracteres.';
+    if (trim($password) !== $password) return 'Retire os espaços no início ou no final da senha.';
+    if (!preg_match('/\p{Lu}/u', $password)) return 'Inclua uma letra maiúscula.';
+    if (!preg_match('/\p{Ll}/u', $password)) return 'Inclua uma letra minúscula.';
+    if (!preg_match('/[0-9]/', $password)) return 'Inclua um número.';
+    if (!preg_match('/[\p{P}\p{S}]/u', $password)) return 'Inclua um caractere especial.';
+    return null;
 }
 
 function ajax_recover(): void {
@@ -110,7 +133,7 @@ function ajax_recover(): void {
 function ajax_reset(): void {
     auth_gate('reset', 12);
     $password = form_value('password');
-    if (!valid_password($password)) fail_ajax('Use uma senha de 12 a 128 caracteres, sem espaços nas pontas.', 422);
+    if ($failure = password_error($password)) reply_account(err($failure, 422, 'password'));
     $user = check_password_reset_key(form_value('key'), form_value('login'));
     if (is_wp_error($user)) fail_ajax('Link de recuperação inválido ou expirado.', 400);
     reset_password($user, $password);

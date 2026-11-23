@@ -40,12 +40,13 @@ function render_route(): void {
         '/favoritos' => 'Favoritos | A7 Rádios',
         '/login' => 'Entrar | A7 Rádios',
         '/cadastro' => 'Criar conta | A7 Rádios',
+        '/confirmar-email' => 'Confirmar e-mail | A7 Rádios',
         '/recuperar-senha' => 'Recuperar senha | A7 Rádios',
         '/termos' => 'Termo de Responsabilidade | A7 Rádios',
         '/privacidade' => 'Privacidade | A7 Rádios',
     ];
     $route = $path === '/' ? '/' : rtrim($path, '/');
-    $is_owner = preg_match('#^/painel(?:/radios(?:/nova|/[0-9]+/editar)?)?$#D', $route);
+    $is_owner = preg_match('#^/painel(?:/dados|/radios(?:/nova|/[0-9]+/editar)?)?$#D', $route);
     if (!isset($routes[$route]) && !$is_owner) return;
     $is_catalog = in_array($route, ['/', '/radios'], true);
     $index = $is_catalog && empty($_SERVER['QUERY_STRING']) && index_enabled() && has_published();
@@ -83,7 +84,7 @@ function html_page(string $title, string $description, ?string $canonical, bool 
     else header('Cache-Control: public, max-age=0, must-revalidate');
     header('Content-Type: text/html; charset=UTF-8');
     header('Referrer-Policy: strict-origin-when-cross-origin');
-    if ($route === '/recuperar-senha') header('Referrer-Policy: no-referrer');
+    if (in_array($route, ['/recuperar-senha', '/confirmar-email'], true)) header('Referrer-Policy: no-referrer');
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') exit;
     $image = $radio ? $radio['image']['url'] : origin() . '/a7-og.jpg';
     $assets = front_assets();
