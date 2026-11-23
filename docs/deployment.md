@@ -59,3 +59,15 @@ Ative o plugin em homologação, cadastre categorias no menu A7 Rádios e publiq
 Copie `dist/` com a pasta oculta `.vite/` e os assets com hash. Compare o `public/.htaccess` com as regras da raiz e mescle o bloco preservando as regras preexistentes e todo `/app/.htaccess`. O rewrite da raiz e das rotas conhecidas entrega o shell ou HTML pela mesma aplicação PHP, inclusive os cabeçalhos de páginas privadas. Rode `node scripts/test-local.mjs` em um ambiente descartável e reproduza o checklist de QA em homologação com a configuração de Apache/SSL/cache da HostGator. Verifique a identificação do IP em `REMOTE_ADDR` se houver CDN ou proxy confiável, configure a restauração de IP no servidor e evite confiar em cabeçalhos de cliente no plugin. Exclua sessões e áreas privadas do cache da CDN.
 
 Em rollback, mantenha o diretório de imagens e o banco de versões. Mantenha os bloqueios Apache da pasta de imagens ao restaurar outras regras e arquivos da raiz.
+
+## Atualização para V2
+
+Faça backup do banco, do plugin e do frontend antes de substituir a versão em homologação. Publique o ZIP do plugin e o build da mesma versão, incluindo `a7-logo.webp`, `broadcast-studio.webp`, `.vite/` e os assets com hash. A V2 usa os snapshots e opções existentes, sem migração da tabela de rádios. Confirme que o banco ofereça funções JSON e locks de sessão. Verifique Dashboard → A7 Rádios, Solicitações e Documentos aprovados antes de liberar operadores. Use apenas textos jurídicos validados e mantenha `A7R_INDEX=false` até a autorização de indexação.
+
+### Validação local da V2
+
+Em 23/11/2026, passaram typecheck, lint, build, sintaxe PHP e a suíte de integração com WordPress, Apache e MariaDB locais. A suíte exercitou autenticação, recuperação por e-mail capturado, titularidade, imagens protegidas, revisões, cidade, sugestões de categoria, remoção, histórico de documentos, visitas e respostas HTTP 200/301/404. O HTML inicial foi verificado diretamente na resposta HTTP.
+
+No Edge, o portal foi exercitado em 320, 375, 768, 1024 e 1440 px. Os testes incluíram navegação por teclado, busca, redução de movimento, player persistente com áudio sintético e recuperação após bloqueio simulado de autoplay. O formulário do proprietário e a prévia Markdown também foram exercitados no WordPress local.
+
+A homologação na HostGator, o e-mail transacional real, streams autorizados de produção e a liberação de indexação continuam pendentes. Confira a configuração real de Apache, PHP, WordPress, banco e cache antes de publicar. Use os ZIPs V2 da pasta `release/`. O ZIP do frontend mantém as regras Apache separadas em `dist/.htaccess` para mesclagem em homologação.

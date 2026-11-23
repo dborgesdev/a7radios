@@ -1,0 +1,18 @@
+.a7r-admin { --a7r-ink: #111013; --a7r-red: #b61932; }
+.a7r-admin > h1 { background: var(--a7r-ink); color: white; border-left: 5px solid #e00018; padding: 18px 24px; border-radius: 10px; }
+.a7r-admin form, .a7r-document-preview { background: white; border: 1px solid #dedee3; padding: 16px; border-radius: 10px; margin: 14px 0; }
+.a7r-admin .button-primary { background: var(--a7r-red); border-color: var(--a7r-red); color: white; }
+.a7r-admin .button-primary:hover, .a7r-admin .button-primary:focus { background: #861128; border-color: #861128; }
+.a7r-admin .widefat th { background: #111013; color: white; }
+.a7r-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.a7r-history { padding: 10px 14px; border: 1px solid #dedee3; background: white; margin-block: 8px; border-radius: 8px; }
+.a7r-history summary { cursor: pointer; }
+.a7r-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.a7r-metrics a { display: grid; gap: 5px; border: 1px solid #dedee3; border-radius: 8px; padding: 12px; }
+.a7r-metrics strong { font-size: 1.4rem; color: #b61932; }
+.a7r-badge { display: inline-block; border-radius: 30px; padding: 3px 9px; font-weight: 600; background: #f3f3f5; }
+.a7r-approved { color: #165f39; background: #d9f2e1; }
+.a7r-pending { color: #704d05; background: #fff0c7; }
+.a7r-rejected { color: #8a0926; background: #ffdce4; }
+.a7r-admin > h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+.a7r-admin > h1::before { content: ''; background: url('/a7-logo.webp') center / contain no-repeat; width: 140px; height: 30px; }

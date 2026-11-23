@@ -119,3 +119,11 @@ Semantic HTML, labels e hints explícitos, validações acessíveis e foco visí
 ## 12. Fora do escopo, pendências e não alegar pronto
 
 Fora: apps móveis, streaming/áudio hospedado, repasse, planos, banners comerciais, pagamento, analytics avançado e importação automática de portais terceiros. Pendências para produção: termo e política jurídicos finalizados, verificação de PHP/WordPress/Apache real, e-mail de recuperação testado, logo fonte real/recorte, plugin instalado e WP homologado, aprovação formal de indexação e publicação. Não chamar deployabilidade de validada apenas por build local. A V1 deve ser demonstrável por dados de teste claramente marcados no **ambiente de homologação**, sem contaminar sitemap/produção.
+
+## V2 Broadcast Premium
+
+A V2 aplica a identidade Broadcast Premium ao portal, à área do proprietário e às telas do plugin. A marca oficial é `public/a7-logo.webp`. A home usa arte de estúdio decorativa e dados do catálogo aprovado. O painel em `/painel/` reúne os indicadores e a lista de rádios. A rota antiga da listagem continua acessível como redirecionamento no frontend.
+
+Cidade é um campo opcional de até 100 caracteres. Aparece no painel, na revisão administrativa e, após aprovação, na página da rádio, no catálogo e na busca. Cadastros antigos continuam válidos. Uma sugestão de categoria é enviada independentemente do cadastro da rádio. O proprietário pode escolher uma categoria existente ou aguardar a decisão antes de enviar.
+
+A página direta da rádio pode tentar iniciar a reprodução com a instância existente de áudio. Se o navegador bloquear, o botão Ouvir Rádio continua disponível. O contador representa visitas aproximadas à página. Um pedido de remoção entra na fila privada e a rádio permanece disponível até uma decisão administrativa. O arquivamento imediato continua disponível para o moderador.

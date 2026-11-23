@@ -85,10 +85,10 @@ const headers = { 'X-WP-Nonce': ownerA.nonce }
 const settingsResponse = await ownerA.request(rest + '/me/submission-settings', { headers })
 assert.match(settingsResponse.headers.get('cache-control'), /no-store/)
 const settings = await json(settingsResponse, 200)
-assert.match(settings.terms.version, /^demo-/)
+assert.match(settings.terms.version, /^(?:demo-|\d{8}-\d{6}-)/)
 assert.equal(typeof settings.remoteImages, 'boolean')
 const fields = {
-  name: original, categoryId, country: 'Brasil', region: 'SP',
+  name: original, categoryId, country: 'Brasil', region: 'SP', city: 'Cidade DEMO ' + suffix,
   streamUrl: 'https://stream.example.com/audio', description,
   websiteUrl: 'https://www.example.com/', appDownloadUrl: 'https://www.example.com/app',
   accepted: 1, termsVersion: settings.terms.version, submissionKey: randomUUID(),
@@ -174,6 +174,12 @@ assert.ok((await verify(sitemap, 200)).includes(radio.slug))
 assert.doesNotMatch(await verify(await anon.request('/robots.txt'), 200), /^Sitemap:/im)
 const publicRadio = await json(await anon.request(rest + '/radios/' + radio.slug), 200)
 assert.equal(new URL(publicRadio.image.url).pathname, originalImage.api)
+assert.equal(publicRadio.city, fields.city)
+assert.ok(html.includes(fields.city))
+assert.equal((await json(await anon.request(rest + '/radios?search=' + encodeURIComponent(fields.city)), 200)).total, 1)
+const ownImage = (await json(await ownerA.request(privatePath, { headers }), 200)).imagePath
+await verify(await ownerA.request(ownImage, { headers }), 200)
+await verify(await ownerB.request(ownImage, { headers: { 'X-WP-Nonce': ownerB.nonce } }), 404)
 await verify(await anon.request(originalImage.disk, { method: 'HEAD' }), 403)
 await verify(await anon.request(rest + '/radios/inexistente-a7-test?slug=' + radio.slug), 404)
 const image = await anon.request(new URL(publicRadio.image.url).pathname)
@@ -231,12 +237,32 @@ console.log('OK revisão pendente e rejeitada preservam publicação, aprovaçã
 
 if (process.env.A7_KEEP_DEMO === '1') console.log('DEMO local preservada: ' + origin + page)
 else {
-  await decide('archive', 303)
+  const removal = await anon.request(rest + '/radios/' + radio.id + '/removal', {
+    method: 'POST', body: form({ name: 'Solicitante ' + suffix, email: suffix + '@example.test', reason: 'Motivo DEMO', evidence: 'Dados sintéticos para homologação.' }),
+  })
+  assert.match(removal.headers.get('cache-control'), /no-store/)
+  await verify(removal, 201)
+  await verify(await anon.request(page), 200)
+  await decideRequest('removal', 'Solicitante ' + suffix)
   await verify(await anon.request(page), 404)
   await verify(await anon.request(replacementImage.api), 404)
   assert.ok(!(await verify(await anon.request('/sitemap.xml'), 200)).includes(radio.slug))
   console.log('OK arquivamento retira página e sitemap')
 }
+if (!process.env.A7_KEEP_DEMO) {
+  const category = 'Categoria DEMO ' + suffix
+  const suggestion = rest + '/me/category-suggestions'
+  await verify(await ownerB.request(suggestion, { method: 'POST', headers: { 'X-WP-Nonce': ownerB.nonce }, body: form({ name: category }) }), 201)
+  await verify(await ownerB.request(suggestion, { method: 'POST', headers: { 'X-WP-Nonce': ownerB.nonce }, body: form({ name: category.toUpperCase() }) }), 409)
+  const privateCategories = async () => json(await ownerB.request(rest + '/me/categories', { headers: { 'X-WP-Nonce': ownerB.nonce } }), 200)
+  assert.equal((await privateCategories()).some(item => item.name === category), false)
+  await decideRequest('category', category)
+  assert.equal((await privateCategories()).some(item => item.name === category), true)
+  const dashboard = await verify(await admin.request('/app/wp-admin/index.php'), 200)
+  assert.match(dashboard, /id="a7r_overview"/)
+  console.log('OK sugestões de categorias, solicitações de remoção e widget administrativo')
+}
+
 await action(ownerA, 'logout', {})
 assert.equal((await json(await ownerA.request(ajax + 'session'), 200)).authenticated, false)
 console.log('OK logout encerra a sessão')
@@ -259,17 +285,36 @@ await action(anon, 'reset', {
 }, 400)
 console.log('OK reset com chave real do WordPress, capturada localmente, e invalidação após uso')
 
+async function decideRequest(kind, name) {
+  const screen = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r-requests&kind=' + kind), 200)
+  const panel = screen.split('</form>').find(part => part.includes('<h2>' + name + '</h2>'))
+  const nonce = panel?.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
+  const record = panel?.match(/name="record" value="([^"]+)"/)?.[1]
+  assert.ok(nonce && record, 'Solicitação ausente na fila: ' + name)
+  await verify(await admin.request('/app/wp-admin/admin-post.php', {
+    method: 'POST', body: form({ action: 'a7r_request_decision', _wpnonce: nonce, record, decision: 'approve', reason: 'Decisão DEMO local' }),
+  }), 303)
+}
+
+
 await verify(await admin.request('/app/wp-admin/edit-tags.php?taxonomy=a7_radio_category&post_type=a7_radio'), 200)
 const legal = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r-legal'), 200)
 const legalNonce = legal.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
 assert.ok(legalNonce)
-const legalFields = { action: 'a7r_legal', _wpnonce: legalNonce, document: 'terms', approved: 1, version: 'demo-' + suffix }
+const legalFields = { action: 'a7r_legal', _wpnonce: legalNonce, document: 'terms', approved: 1, base: settings.terms.version }
 const saveLegal = content => admin.request('/app/wp-admin/admin-post.php', {
   method: 'POST', body: form({ ...legalFields, content }),
 })
-const legalResults = await Promise.all(['Texto DEMO um', 'Texto DEMO dois'].map(saveLegal))
+const legalTexts = ['## Texto DEMO um\n\n**Ênfase**', '## Texto DEMO dois\n\n**Ênfase**']
+const legalResults = await Promise.all(legalTexts.map(saveLegal))
 assert.deepEqual(legalResults.map(response => response.status).sort(), [303, 409])
 const publishedLegal = await json(await anon.request(rest + '/terms'), 200)
-assert.equal(publishedLegal.version, legalFields.version)
-assert.equal(publishedLegal.content, legalResults[0].status === 303 ? 'Texto DEMO um' : 'Texto DEMO dois')
+assert.match(publishedLegal.version, /^\d{8}-\d{6}-[a-f0-9]{8}$/)
+assert.notEqual(publishedLegal.version, legalFields.base)
+assert.equal(publishedLegal.content.replaceAll('\r\n', '\n'), legalResults[0].status === 303 ? legalTexts[0] : legalTexts[1])
+assert.match(publishedLegal.html, /<h3[^>]+>Texto DEMO/)
+assert.match(publishedLegal.html, /<strong>Ênfase<\/strong>/)
+assert.match(await verify(await anon.request('/termos/'), 200), /<h3[^>]+>Texto DEMO/)
+const historyPage = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r-legal'), 200)
+assert.ok(historyPage.includes('Versão ' + legalFields.base))
 console.log('OK gestão nativa de categorias e publicação imutável de documento jurídico versionado')

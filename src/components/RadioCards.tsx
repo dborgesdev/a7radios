@@ -5,9 +5,9 @@ import { FavoriteButton } from '../favorites'
 import { PlayButton } from '../player'
 import type { CSSProperties } from 'react'
 
-export function Cover({ radio }: { radio: Radio }) {
+export function Cover({ radio, eager = false }: { radio: Radio; eager?: boolean }) {
   return radio.image.url
-    ? <img className="cover" src={radio.image.url} alt={radio.image.alt} width={radio.image.width} height={radio.image.height} loading="lazy" />
+    ? <img className="cover" src={radio.image.url} alt={radio.image.alt} width={radio.image.width} height={radio.image.height} loading={eager ? 'eager' : 'lazy'} />
     : <div className={'cover cover-fallback tone-' + radio.id % 4} aria-hidden="true"><AudioLines size={70} strokeWidth={1.2} /></div>
 }
 
@@ -23,7 +23,7 @@ export function RadioCards({ radios }: { radios: Radio[] }) {
       <div className="card-info"><p className="eyebrow">{radio.category.name}</p>
         <h3><Link to={radioPath(radio.slug)}>{radio.name}</Link></h3>
         <p className="muted location">{locationLabel(radio)}</p>
-        {radio.streamUrl ? <PlayButton radio={radio} compact /> : <Link className="play-icon" aria-label={'Ver ' + radio.name} to={radioPath(radio.slug)}><AudioLines size={19} /></Link>}
+        {radio.streamUrl ? <PlayButton radio={radio} queue={radios} compact /> : <Link className="play-icon" aria-label={'Ver ' + radio.name} to={radioPath(radio.slug)}><AudioLines size={19} /></Link>}
       </div>
     </li>)}
   </ul>

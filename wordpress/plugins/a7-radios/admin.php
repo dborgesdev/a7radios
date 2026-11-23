@@ -6,6 +6,7 @@ function register_admin(): void {
     add_menu_page('A7 Rádios', 'A7 Rádios', 'a7r_moderate', 'a7r', __NAMESPACE__ . '\moderation_page', 'dashicons-format-audio');
     add_submenu_page('a7r', 'Categorias', 'Categorias', 'a7r_moderate', 'edit-tags.php?taxonomy=a7_radio_category&post_type=a7_radio');
     add_submenu_page('a7r', 'Documentos aprovados', 'Documentos aprovados', 'a7r_moderate', 'a7r-legal', __NAMESPACE__ . '\legal_page');
+    add_submenu_page('a7r', 'Solicitações', 'Solicitações', 'a7r_moderate', 'a7r-requests', __NAMESPACE__ . '\requests_page');
     if (current_user_can('list_users')) add_submenu_page('a7r', 'Usuários', 'Usuários', 'list_users', 'users.php');
 }
 
@@ -15,7 +16,7 @@ add_action('admin_post_a7r_review_image', __NAMESPACE__ . '\review_image');
 
 function require_moderator(): void {
     if (!current_user_can('a7r_moderate')) wp_die('Acesso negado.', '', ['response' => 403]);
-    no_store();
+    if (!headers_sent()) no_store();
 }
 
 function moderation_page(): void {
@@ -28,7 +29,7 @@ function moderation_page(): void {
     $filter = isset($_GET['status']) && is_string($_GET['status']) ? sanitize_key($_GET['status']) : 'queue';
     $id = isset($_GET['radio']) && is_scalar($_GET['radio']) ? absint($_GET['radio']) : 0;
     ?>
-    <div class="wrap"><h1>A7 Rádios</h1>
+    <div class="wrap a7r-admin"><h1>A7 Rádios</h1>
     <p><strong>Cadastradas:</strong> <?= esc_html($total) ?> ·
     <strong>Aprovadas:</strong> <?= esc_html($counts['approved']->total ?? 0) ?> ·
     <strong>Pendentes:</strong> <?= esc_html($counts['pending']->total ?? 0) ?> ·
@@ -51,16 +52,19 @@ function moderation_page(): void {
         $sort = $filter === 'queue' ? 'submitted_at ASC, id ASC' : 'submitted_at DESC, id DESC';
         $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $table $where ORDER BY $sort LIMIT 30 OFFSET %d", ($page - 1) * 30), ARRAY_A);
         ?>
-        <table class="widefat striped"><thead><tr><th>Rádio</th><th>Proprietário</th><th>Publicação</th><th>Revisão</th><th>Envio (UTC)</th></tr></thead><tbody>
+        <table class="widefat striped"><thead><tr><th>Rádio</th><th>Proprietário</th><th>Publicação</th><th>Revisão</th><th>Envio (UTC)</th><th>Ações</th></tr></thead><tbody>
         <?php foreach ($rows as $row):
             $revision = state($row)['revision'];
             $owner = get_userdata((int) $row['owner']); ?>
             <tr><td><a href="<?= esc_url(admin_url('admin.php?page=a7r&radio=' . $row['id'])) ?>"><?= esc_html($revision['fields']['name']) ?></a></td>
             <td><?= esc_html($owner ? $owner->display_name : 'Conta indisponível') ?></td>
-            <td><?= esc_html(status_name($row['status'])) ?></td><td><?= esc_html(status_name($revision['status'])) ?></td>
-            <td><?= esc_html($row['submitted_at']) ?></td></tr>
+            <td><span class="a7r-badge a7r-<?= esc_attr($row['status']) ?>"><?= esc_html(status_name($row['status'])) ?></span></td>
+            <td><span class="a7r-badge a7r-<?= esc_attr($revision['status']) ?>"><?= esc_html(status_name($revision['status'])) ?></span></td>
+            <td><?= esc_html($row['submitted_at']) ?></td>
+            <td><a class="button <?= $row['pending'] ? 'button-primary' : '' ?>" href="<?= esc_url(admin_url('admin.php?page=a7r&radio=' . $row['id'])) ?>"><?= $row['pending'] ? 'Analisar' : 'Ver detalhes' ?></a>
+            <?php if ($row['status'] === 'approved'): ?><a class="button" href="<?= esc_url(radio_url($row['slug'])) ?>" target="_blank" rel="noopener noreferrer">Ver Rádio</a><?php endif; ?></td></tr>
         <?php endforeach; ?>
-        <?php if (!$rows): ?><tr><td colspan="5">Nenhuma rádio neste filtro.</td></tr><?php endif; ?>
+        <?php if (!$rows): ?><tr><td colspan="6">Nenhuma rádio neste filtro.</td></tr><?php endif; ?>
         </tbody></table>
         <p><?= wp_kses_post(paginate_links(['total' => max(1, $total_pages), 'current' => $page])) ?></p>
     <?php endif; ?></div>
@@ -77,7 +81,7 @@ function review_panel(array $row): void {
     $before = $data['published'];
     $after = $revision['fields'];
     $labels = [
-        'name' => 'Nome', 'category' => 'Categoria', 'country' => 'País', 'region' => 'Estado/região',
+        'name' => 'Nome', 'category' => 'Categoria', 'country' => 'País', 'region' => 'Estado/região', 'city' => 'Cidade',
         'description' => 'Descrição', 'streamUrl' => 'Streaming', 'websiteUrl' => 'Site',
         'appDownloadUrl' => 'Aplicativo', 'asset' => 'Imagem',
     ];
@@ -87,8 +91,8 @@ function review_panel(array $row): void {
     <?php if ($row['status'] === 'approved'): ?><p><a href="<?= esc_url(radio_url($row['slug'])) ?>">Abrir página publicada</a></p><?php endif; ?>
     <table class="widefat striped"><thead><tr><th>Campo</th><th>Publicado</th><th>Proposta</th></tr></thead><tbody>
     <?php foreach ($labels as $field => $label): ?>
-        <tr><th scope="row"><?= esc_html($label) ?><?= ($before[$field] ?? null) !== $after[$field] ? '<br><em>Alterado</em>' : '' ?></th>
-        <td><?php review_value($row, $field, $before[$field] ?? null); ?></td><td><?php review_value($row, $field, $after[$field]); ?></td></tr>
+        <tr><th scope="row"><?= esc_html($label) ?><?= ($before[$field] ?? null) !== ($after[$field] ?? null) ? '<br><em>Alterado</em>' : '' ?></th>
+        <td><?php review_value($row, $field, $before[$field] ?? null); ?></td><td><?php review_value($row, $field, $after[$field] ?? null); ?></td></tr>
     <?php endforeach; ?>
     </tbody></table>
     <p>Aceite: versão <?= esc_html($revision['acceptance']['version']) ?>, <?= esc_html($revision['acceptance']['at']) ?>.</p>
@@ -199,19 +203,31 @@ function moderate(array $row, int $sequence, string $decision, string $reason, i
 function legal_page(): void {
     require_moderator();
     ?>
-    <div class="wrap"><h1>Documentos aprovados</h1>
+    <div class="wrap a7r-admin"><h1>Documentos aprovados</h1>
     <p>Publique aqui somente textos validados. Cada versão tem conteúdo fixo. Enquanto o termo estiver ausente, o envio de rádios permanece indisponível.</p>
     <?php foreach (['terms' => 'Termo de Responsabilidade', 'privacy' => 'Política de Privacidade'] as $key => $label): ?>
         <form action="<?= esc_url(admin_url('admin-post.php')) ?>" method="post">
             <h2><?= esc_html($label) ?></h2>
-            <p>Versão atual: <?= esc_html(legal($key)['version'] ?? 'nenhuma') ?></p>
+            <?php $current = legal($key); ?>
+            <p>Versão atual: <?= esc_html($current['version'] ?? 'nenhuma') ?></p>
             <?php wp_nonce_field('a7r_legal_' . $key); ?>
             <input type="hidden" name="action" value="a7r_legal"><input type="hidden" name="document" value="<?= esc_attr($key) ?>">
-            <p><label>Nova versão <input name="version" maxlength="32" required></label></p>
-            <p><label>Texto aprovado<textarea class="large-text" name="content" required maxlength="30000" rows="6"></textarea></label></p>
+            <input type="hidden" name="base" value="<?= esc_attr($current['version'] ?? '') ?>">
+            <div class="a7r-editor" data-preview="<?= esc_attr(wp_create_nonce('a7r_document_preview')) ?>">
+                <div class="a7r-tools">
+                    <button type="button" class="button" data-prefix="## ">Título</button>
+                    <button type="button" class="button" data-prefix="**" data-suffix="**">Negrito</button>
+                    <button type="button" class="button" data-prefix="*" data-suffix="*">Itálico</button>
+                    <button type="button" class="button" data-prefix="- ">Lista</button>
+                    <button type="button" class="button" data-preview-button>Visualizar</button>
+                </div>
+                <p><label>Texto aprovado (Markdown)<textarea class="large-text" name="content" required maxlength="30000" rows="12"><?= esc_textarea($current['content'] ?? '') ?></textarea></label></p>
+                <div class="a7r-document-preview" tabindex="0" hidden></div>
+            </div>
             <p><label><input type="checkbox" name="approved" value="1" required> Confirmo que esta versão foi validada para publicação.</label></p>
             <p><button class="button button-primary">Ativar versão</button></p>
         </form>
+        <?php document_history($key, $current['version'] ?? ''); ?>
     <?php endforeach; ?></div>
     <?php
 }
@@ -223,12 +239,19 @@ function legal_action(): void {
     $key = form_value('document');
     if (!in_array($key, ['terms', 'privacy'], true)) wp_die('Documento inválido.', '', ['response' => 400]);
     check_admin_referer('a7r_legal_' . $key);
-    $version = form_value('version');
-    $content = sanitize_textarea_field(form_value('content'));
+    $lock = substr(hash('sha256', $wpdb->options . ':a7r:' . $key), 0, 64);
+    if ((int) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 4)', $lock)) !== 1) wp_die('Outro documento está sendo publicado. Tente novamente.', '', ['response' => 409]);
+    register_shutdown_function(static fn() => $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock)));
+    wp_cache_delete('a7r_' . $key, 'options');
+    wp_cache_delete('notoptions', 'options');
+    $current = legal($key);
+    if (form_value('base') !== ($current['version'] ?? '')) wp_die('A versão vigente mudou. Reabra o editor.', '', ['response' => 409]);
+    $version = gmdate('Ymd-His') . '-' . substr(wp_generate_uuid4(), 0, 8);
+    $content = sanitize_textarea_field(str_replace(["\r\n", "\r"], "\n", form_value('content')));
     if (!preg_match('/^[a-zA-Z0-9_.-]{1,32}$/D', $version) || !$content || strlen($content) > 120000 || form_value('approved') !== '1') {
         wp_die('Versão ou texto inválido.', '', ['response' => 422]);
     }
-    $entry = ['version' => $version, 'content' => $content];
+    $entry = ['version' => $version, 'content' => $content, 'format' => 'markdown'];
     $archive = 'a7r_legal_' . $key . '_' . hash('sha256', strtolower($version));
     $record = $entry + ['by' => get_current_user_id(), 'at' => gmdate(DATE_ATOM)];
     // Reserve the immutable version atomically. WP add_option uses an upsert.
@@ -246,4 +269,45 @@ function legal_action(): void {
     }
     wp_safe_redirect(admin_url('admin.php?page=a7r-legal'), 303);
     exit;
+}
+add_action('current_screen', static function ($screen) {
+    if (current_user_can('a7r_moderate') && in_array($screen->id, ['toplevel_page_a7r', 'a7-radios_page_a7r-legal', 'a7-radios_page_a7r-requests'], true)) no_store();
+});
+add_action('admin_enqueue_scripts', static function () {
+    $page = isset($_GET['page']) && is_string($_GET['page']) ? sanitize_key($_GET['page']) : '';
+    if (!current_user_can('a7r_moderate') || !in_array($page, ['a7r', 'a7r-legal', 'a7r-requests'], true)) return;
+    wp_enqueue_style('a7r-admin', plugins_url('admin.css', __FILE__), [], '2.0.0');
+    if ($page === 'a7r-legal') wp_enqueue_script('a7r-admin', plugins_url('admin.js', __FILE__), [], '2.0.0', true);
+});
+
+add_action('wp_dashboard_setup', static function () {
+    if (current_user_can('a7r_moderate')) wp_add_dashboard_widget('a7r_overview', 'A7 Rádios On-Line', __NAMESPACE__ . '\a7r_overview');
+});
+
+function a7r_overview(): void {
+    global $wpdb;
+    if (!current_user_can('a7r_moderate')) return;
+    $table = table();
+    $counts = $wpdb->get_row("SELECT COUNT(*) AS total, SUM(status = 'pending') AS pending,
+        SUM(pending = 1 AND status <> 'pending') AS revisions FROM $table", ARRAY_A);
+    $links = [
+        ['Cadastradas', $counts['total'] ?? 0, 'a7r&status=all'],
+        ['Pendentes de aprovação', $counts['pending'] ?? 0, 'a7r&status=pending'],
+        ['Revisões pendentes', $counts['revisions'] ?? 0, 'a7r&status=queue'],
+        ['Sugestões de categorias', pending_request_count('category'), 'a7r-requests&kind=category'],
+        ['Pedidos de remoção', pending_request_count('removal'), 'a7r-requests&kind=removal'],
+    ];
+    echo '<ul>';
+    foreach ($links as [$label, $count, $page]) {
+        echo '<li><a href="' . esc_url(admin_url('admin.php?page=' . $page)) . '">' . esc_html($label) . '</a> <strong>' . esc_html((int) $count) . '</strong></li>';
+    }
+    echo '</ul>';
+    $rows = $wpdb->get_results("SELECT id, state FROM $table WHERE pending = 1 ORDER BY submitted_at, id LIMIT 4", ARRAY_A);
+    if (!$rows) return;
+    echo '<h3>Rádios aguardando análise</h3><ul>';
+    foreach ($rows as $row) {
+        echo '<li><a href="' . esc_url(admin_url('admin.php?page=a7r&radio=' . $row['id'])) . '">' .
+            esc_html(state($row)['revision']['fields']['name']) . '</a></li>';
+    }
+    echo '</ul>';
 }

@@ -1,13 +1,14 @@
 import { useEffect } from 'react'
-import { AudioLines, Disc3, Globe2, Headphones, Music2, RadioTower } from 'lucide-react'
-import { Link, useLocation } from 'react-router-dom'
+import { AudioLines, Grid2X2, Headphones, Music2, RadioTower, Search } from 'lucide-react'
+import { Link, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 import { useApi } from '../api'
 import { Empty, RadioCards } from '../components/RadioCards'
 import type { Category, Radio } from '../domain'
 
 export function Home() {
   const discovery = useApi<{ latest: Radio[]; suggested: Radio[] }>('/discovery')
-  const categories = useApi<Category[]>('/categories')
+  const categories = useOutletContext<ReturnType<typeof useApi<Category[]>>>()
+  const navigate = useNavigate()
   const { hash } = useLocation()
   useEffect(() => {
     if (hash === '#categorias') document.getElementById('categorias')?.scrollIntoView()
@@ -16,26 +17,35 @@ export function Home() {
 
   return <>
     <section className="hero">
+      <div className="broadcast-wave" aria-hidden="true">{[22, 36, 55, 83, 124, 91, 177, 115, 60, 90, 39].map((height, index) =>
+        <i key={height} style={{ height, animationDelay: index * -0.12 + 's' }} />)}</div>
       <div className="shell hero-inner">
         <div className="hero-copy">
-          <p className="hero-label"><Globe2 size={17} /> A7 Rádios On-Line</p>
-          <h1>Do Brasil para<br />o <em>mundo.</em></h1>
-          <p>Encontre rádios online e ouça suas emissoras favoritas em um só lugar.</p>
-          <Link className="button primary" to="/radios/"><Headphones size={19} /> Explorar rádios</Link>
+          <p className="hero-label"><RadioTower size={17} /> A7 Rádios On-Line</p>
+          <h1>Rádios do Brasil<br />em um só <em>lugar</em></h1>
+          <p>Encontre emissoras por categoria, região e estilo. Do Brasil para o mundo.</p>
         </div>
-        <div className="hero-art" aria-hidden="true">
-          <div className="orbit orbit-outer" /><div className="orbit orbit-inner" />
-          <div className="signal">{[22, 34, 52, 82, 122, 160, 109, 156, 211, 278, 225, 161, 113, 149, 84, 58, 34].map((height, index) =>
-            <i key={index} style={{ height: height + 'px', opacity: .3 + index / 28 }} />)}</div>
-          <div className="hero-brand"><img src="/a7-logo.png" alt="" /></div>
-          <Disc3 className="art-disc" size={42} strokeWidth={1.2} />
+        <form className="hero-search" role="search" onSubmit={event => {
+          event.preventDefault()
+          const search = String(new FormData(event.currentTarget).get('search') ?? '').trim()
+          navigate('/radios/' + (search ? '?' + new URLSearchParams({ search }) : ''))
+        }}>
+          <label><Search size={24} /><input type="search" name="search" aria-label="Buscar rádio, categoria ou cidade" placeholder="Rádio, categoria ou cidade" /></label>
+          <button className="button primary">Buscar</button>
+        </form>
+        <div className="hero-categories"><strong>Explore por categoria</strong>
+          {categories.data?.slice(0, 4).map((category, index) => {
+            const Icon = categoryIcons[index]
+            return <Link key={category.id} to={'/radios/?' + new URLSearchParams({ category: category.slug })}><Icon size={18} />{category.name}</Link>
+          })}
+          <Link to="/#categorias"><Grid2X2 size={18} /> Todas as categorias</Link>
         </div>
       </div>
     </section>
     <div className="shell home-content">
       <section className="content-section">
         <div className="section-heading"><div>
-          <h2>Adicionadas recentemente</h2></div><Link className="button secondary" to="/radios/">Ver catálogo</Link></div>
+          <h2>Rádios em destaque</h2></div><Link className="button secondary" to="/radios/">Ver catálogo</Link></div>
         {discovery.loading && <div className="placeholder" role="status">Carregando rádios…</div>}
         {discovery.error && <Empty>{discovery.error}</Empty>}
         {discovery.data && (discovery.data.latest.length ? <RadioCards radios={discovery.data.latest} /> :

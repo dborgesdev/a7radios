@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api, useApi } from '../api'
 import { useAuth } from '../auth'
+import { CategorySuggestion } from '../components/CategorySuggestion'
 import { statusLabel, type Category, type OwnRadio, type Terms } from '../domain'
 
 const states = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ')
@@ -15,7 +16,7 @@ export function RadioForm() {
   const categories = useApi<Category[]>('/me/categories', value?.nonce)
   const settings = useApi<{ terms: Terms; remoteImages: boolean }>('/me/submission-settings', value?.nonce)
   return <>
-    <h1>{id ? 'Editar rádio' : 'Cadastrar rádio'}</h1>
+    <h1>{id ? 'Editar Rádio' : 'Cadastrar Rádio'}</h1>
     {(existing.loading || categories.loading || settings.loading) ? <p role="status">Carregando formulário…</p> :
       (existing.error || categories.error || settings.error) ? <p role="alert">{existing.error || categories.error || settings.error}</p> :
       <Editor key={id ?? 'new'} existing={existing.data} categories={categories.data ?? []} terms={settings.data?.terms ?? null}
@@ -31,6 +32,8 @@ function Editor({ existing, categories, terms, remoteImages, nonce }: {
   const [submissionKey] = useState(() => crypto.randomUUID())
   const [country, setCountry] = useState(draft?.country ?? 'Brasil')
   const [preview, setPreview] = useState('')
+  const termsDialog = useRef<HTMLDialogElement>(null)
+  const termsTrigger = useRef<HTMLButtonElement>(null)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<{ message: string; field?: string }>()
   const locked = existing?.revisionStatus === 'pending' || existing?.status === 'archived'
@@ -52,7 +55,7 @@ function Editor({ existing, categories, terms, remoteImages, nonce }: {
       await api(existing ? '/me/radios/' + existing.id + '/revisions' : '/me/radios', {
         method: 'POST', headers: { 'X-WP-Nonce': nonce }, body: data,
       })
-      navigate('/painel/radios/')
+      navigate('/painel/')
     } catch (error) {
       setFailure({ message: (error as Error).message, field: error instanceof ApiError ? error.field : undefined })
     } finally { setBusy(false) }
@@ -63,6 +66,7 @@ function Editor({ existing, categories, terms, remoteImages, nonce }: {
     {!terms && <p>O envio será liberado quando o Termo de Responsabilidade aprovado estiver disponível.</p>}
     {!categories.length && <p>Nenhuma categoria disponível para cadastro.</p>}
     {failure && !failure.field && <p className="error" role="alert">{failure.message}</p>}
+    {!locked && <CategorySuggestion nonce={nonce} />}
     <form className="form" onSubmit={submit}>
       <fieldset disabled={busy || !!locked}>
         <label>Nome da rádio<input name="name" defaultValue={draft?.name} required maxLength={100} />
@@ -81,6 +85,7 @@ function Editor({ existing, categories, terms, remoteImages, nonce }: {
             <input key="other" name="region" defaultValue={draft?.region} placeholder="Informe a região ou localidade" maxLength={80} required={country === 'Outro'} />}
             {fieldError('region')}</label>
         </div>
+        <label>Cidade<input name="city" defaultValue={draft?.city} maxLength={100} autoComplete="address-level2" />{fieldError('city')}</label>
         <label>URL do streaming<input name="streamUrl" type="url" defaultValue={draft?.streamUrl} required maxLength={2000} />
           <small>Cole o endereço direto de áudio, com https://, porta e caminho quando houver. Ex.: https://s04.svrdedicado.org:7228/stream. Não cole a página do player.</small>{fieldError('streamUrl')}</label>
         <label>Website oficial<input name="websiteUrl" type="url" defaultValue={draft?.websiteUrl} maxLength={2000} />
@@ -89,15 +94,25 @@ function Editor({ existing, categories, terms, remoteImages, nonce }: {
           <small>Cole o link público da loja de aplicativos ou da página oficial de download; não envie arquivos de aplicativo.</small>{fieldError('appDownloadUrl')}</label>
         <label>Descrição<textarea name="description" defaultValue={draft?.description} required rows={5} maxLength={2000} />
           <small>Apresente sua rádio, programação e estilo musical. Não inclua informações falsas.</small>{fieldError('description')}</label>
-        <label>Imagem<input name="image" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => setPreview(event.target.files?.[0] ? URL.createObjectURL(event.target.files[0]) : '')} />
+        <label className="upload-area"><span className="button primary">Escolher imagem</span><input name="image" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => setPreview(event.target.files?.[0] ? URL.createObjectURL(event.target.files[0]) : '')} />
           <small>Imagem quadrada (1:1). Recomendado: 512 × 512 pixels. PNG, JPG ou WebP. Limite de 5 MB.</small>{fieldError('image')}</label>
         {draft && !preview && <p className="muted">A imagem do último envio será mantida se você deixar os campos de imagem vazios.</p>}
         {preview && <img className="image-preview" src={preview} width="128" height="128" alt="Prévia do recorte quadrado" />}
         {remoteImages && <label>URL da imagem<input name="imageUrl" type="url" disabled={!!preview} maxLength={2000} />
           <small>Link direto HTTPS para uma imagem; use este campo apenas se não enviar arquivo.</small>{fieldError('imageUrl')}</label>}
-        {terms && <div><label className="check"><input type="checkbox" name="accepted" value="1" required />
-          Li e concordo com o Termo de Responsabilidade</label>
-          <Link to="/termos/" target="_blank" rel="noopener noreferrer">Ler Termo de Responsabilidade</Link></div>}
+        {terms && <div className="terms-acceptance">
+          <div className="actions"><button type="button" className="button secondary" ref={termsTrigger} onClick={() => termsDialog.current?.showModal()}>Ler Termo de Responsabilidade</button>
+          <Link to="/privacidade/" target="_blank" rel="noopener noreferrer">Política de Privacidade</Link></div>
+          <dialog className="document-dialog" ref={termsDialog} onClose={() => termsTrigger.current?.focus()} aria-labelledby="terms-heading">
+            <h2 id="terms-heading">Termo de Responsabilidade</h2><p className="muted">Versão {terms.version}</p>
+            {terms.html ? <div className="document-body" dangerouslySetInnerHTML={{ __html: terms.html }} /> : <div className="legal-text">{terms.content}</div>}
+            <div className="actions">
+              <button type="button" className="button primary" onClick={() => termsDialog.current?.close()}>Concluir leitura</button>
+              <button type="button" className="button secondary" onClick={() => termsDialog.current?.close()}>Fechar</button>
+            </div>
+          </dialog>
+          <label className="check"><input type="checkbox" name="accepted" value="1" required />
+          Li e concordo com o Termo de Responsabilidade</label></div>}
       </fieldset>
       <button className="button primary" disabled={busy || !!locked || !terms || !categories.length}>{busy ? 'Enviando…' : 'Enviar para análise'}</button>
     </form>

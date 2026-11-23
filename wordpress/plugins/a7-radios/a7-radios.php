@@ -2,7 +2,7 @@
 /**
  * Plugin Name: A7 Rádios On-Line
  * Description: Catálogo, proprietários, moderação e páginas públicas A7.
- * Version: 1.0.1
+ * Version: 2.0.0
  * Requires at least: 6.6
  * Requires PHP: 8.2
  */
@@ -14,6 +14,8 @@ require __DIR__ . '/auth.php';
 require __DIR__ . '/media.php';
 require __DIR__ . '/api.php';
 require __DIR__ . '/admin.php';
+require __DIR__ . '/documents.php';
+require __DIR__ . '/requests.php';
 require __DIR__ . '/public.php';
 
 register_activation_hook(__FILE__, __NAMESPACE__ . '\install');

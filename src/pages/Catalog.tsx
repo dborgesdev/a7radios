@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import { useApi } from '../api'
 import { Empty, RadioCards } from '../components/RadioCards'
 import type { Category, Page } from '../domain'
@@ -9,7 +9,7 @@ export function Catalog() {
   const category = params.get('category') ?? ''
   const page = Math.max(1, Number(params.get('page')) || 1)
   const query = new URLSearchParams({ search, category, page: String(page) })
-  const categories = useApi<Category[]>('/categories')
+  const categories = useOutletContext<ReturnType<typeof useApi<Category[]>>>()
   const result = useApi<Page>('/radios?' + query)
   function update(key: string, value: string) {
     const next = new URLSearchParams(params)
@@ -27,7 +27,7 @@ export function Catalog() {
   return <div className="shell page">
     <h1>Rádios</h1>
     <form className="filters" onSubmit={event => { event.preventDefault(); update('search', String(new FormData(event.currentTarget).get('search')).trim()) }}>
-      <label>Buscar rádio ou categoria<input key={search} type="search" name="search" defaultValue={search} maxLength={100} /></label>
+      <label>Buscar rádio, categoria ou cidade<input key={search} type="search" name="search" defaultValue={search} maxLength={100} /></label>
       <label>Categoria<select value={category} onChange={event => update('category', event.target.value)}>
         <option value="">Todas</option>{categories.data?.map(item => <option value={item.slug} key={item.id}>{item.name}</option>)}
       </select></label>
