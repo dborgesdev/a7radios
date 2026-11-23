@@ -16,7 +16,7 @@ if ($path === '/app') {
 if ($path !== '/' && $path !== '/app/' && is_file($root . $path)) return false;
 if (str_starts_with($path, '/app/wp-admin/') && is_dir($root . $path) && is_file($root . $path . '/index.php')) return false;
 
-$frontend = '#^/(?:|radios/?|radio/[a-z0-9-]{1,180}/?|sitemap(?:-[0-9]+)?\.xml|robots\.txt|favoritos/?|login/?|cadastro/?|recuperar-senha/?|termos/?|privacidade/?|painel(?:/radios(?:/nova|/[0-9]+/editar)?)?/?)$#D';
+$frontend = '#^/(?:|radios/?|radio/[a-z0-9-]{1,180}/?|sitemap(?:-[0-9]+)?\.xml|robots\.txt|favoritos/?|login/?|cadastro/?|confirmar-email/?|recuperar-senha/?|termos/?|privacidade/?|painel(?:/dados|/radios(?:/nova|/[0-9]+/editar)?)?/?)$#D';
 if (str_starts_with($path, '/app/') || preg_match($frontend, $path)) {
     $_SERVER['SCRIPT_NAME'] = '/app/index.php';
     $_SERVER['PHP_SELF'] = '/app/index.php';

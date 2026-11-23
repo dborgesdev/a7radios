@@ -72,6 +72,7 @@ function review_panel(array $row): void {
             <?php endif; ?>
         </form>
     <?php endif; ?>
+    <?php deletion_panel($row); ?>
     <h3>Histórico de decisões</h3><ul>
     <?php foreach ($data['history'] as $item): ?><li>
         <?= esc_html(status_name($item['status']) . ' · ' . $item['decidedAt'] . ' · moderador #' . $item['decidedBy'] . ' · ' . $item['reason']) ?>
@@ -236,8 +237,8 @@ add_action('current_screen', static function ($screen) {
 add_action('admin_enqueue_scripts', static function ($hook) {
     $page = isset($_GET['page']) && is_string($_GET['page']) ? sanitize_key($_GET['page']) : '';
     if (!current_user_can('a7r_moderate') || ($hook !== 'index.php' && !in_array($page, ['a7r', 'a7r-legal', 'a7r-requests'], true))) return;
-    wp_enqueue_style('a7r-admin', plugins_url('admin.css', __FILE__), [], '2.1.0');
-    if (in_array($page, ['a7r', 'a7r-legal'], true)) wp_enqueue_script('a7r-admin', plugins_url('admin.js', __FILE__), [], '2.1.0', true);
+    wp_enqueue_style('a7r-admin', plugins_url('admin.css', __FILE__), [], '2.2.0');
+    if (in_array($page, ['a7r', 'a7r-legal'], true)) wp_enqueue_script('a7r-admin', plugins_url('admin.js', __FILE__), [], '2.2.0', true);
 });
 
 add_action('wp_dashboard_setup', static function () {

@@ -24,12 +24,10 @@ export function RadioShelf({ id, title, radios, action }: {
     list.scrollBy({ left: direction * list.clientWidth * .88, behavior })
   }
   return <section className="content-section radio-shelf" aria-labelledby={id}>
-    <div className="section-heading"><h2 id={id}>{title}</h2><div className="actions">
-      {action}
-      <button type="button" className="icon-button shelf-arrow" aria-label={title + ', voltar'} aria-controls={id + '-lista'} disabled={edges.start} onClick={() => move(-1)}><ChevronLeft /></button>
-      <button type="button" className="icon-button shelf-arrow" aria-label={title + ', avançar'} aria-controls={id + '-lista'} disabled={edges.end} onClick={() => move(1)}><ChevronRight /></button>
-    </div></div>
-    <RadioCards radios={radios} compactLocation shelf={{
+    <div className="section-heading"><h2 id={id}>{title}</h2>{action}</div>
+    <div className="shelf-stage">
+      <button type="button" className="icon-button shelf-arrow shelf-prev" aria-label={title + ', voltar'} aria-controls={id + '-lista'} disabled={edges.start} onClick={() => move(-1)}><ChevronLeft /></button>
+      <RadioCards radios={radios} compactLocation shelf={{
       id: id + '-lista', label: title, ref: track,
       onScroll: event => {
         const list = event.currentTarget
@@ -40,6 +38,8 @@ export function RadioShelf({ id, title, radios, action }: {
         event.preventDefault()
         move(event.key === 'ArrowLeft' ? -1 : 1)
       },
-    }} />
+      }} />
+      <button type="button" className="icon-button shelf-arrow shelf-next" aria-label={title + ', avançar'} aria-controls={id + '-lista'} disabled={edges.end} onClick={() => move(1)}><ChevronRight /></button>
+    </div>
   </section>
 }

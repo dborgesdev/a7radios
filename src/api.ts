@@ -40,7 +40,7 @@ export function session() {
 }
 
 export function auth(action: string, data: FormData) {
-  return json<{ message: string }>(ajax + 'a7r_' + action, { method: 'POST', body: data })
+  return json<{ message: string; emailChange?: boolean }>(ajax + 'a7r_' + action, { method: 'POST', body: data })
 }
 
 type Resource<T> = { data?: T; error?: string; loading: boolean }

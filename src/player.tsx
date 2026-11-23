@@ -133,11 +133,8 @@ export function IntegratedPlayer({ radio }: { radio: Radio }) {
   const current = player.radio?.id === radio.id
   return <section ref={panel} className="integrated-player" aria-label="Player da Rádio">
     <div className="integrated-status">
-      <span className={'on-air-icon' + (current && player.status === 'playing' ? ' playing' : '')}><RadioTower size={22} aria-hidden="true" /></span>
-      <div><strong>{current && player.status === 'playing' ? 'Ao vivo' : 'Transmissão online'}</strong>
-        <p role="status">{current ? playbackMessage[player.status] : player.radio ? 'Sintonizada: ' + player.radio.name : 'Pronta para reproduzir'}
-          {current && player.metadata && ' · ' + [player.metadata.title, player.metadata.artist].filter(Boolean).join(' — ')}</p>
-      </div>
+      <NowPlayingInfo radio={current ? radio : player.radio ?? radio} metadata={player.metadata} />
+      {current && player.status !== 'playing' && <small role="status">{playbackMessage[player.status]}</small>}
     </div>
     <div className="integrated-controls">
       <PlayButton radio={radio} />
@@ -147,14 +144,27 @@ export function IntegratedPlayer({ radio }: { radio: Radio }) {
   </section>
 }
 
+function NowPlayingInfo({ radio, metadata, link = false }: { radio: Radio; metadata?: NowPlaying; link?: boolean }) {
+  const [failed, setFailed] = useState('')
+  const artwork = metadata?.artwork !== failed ? metadata?.artwork : undefined
+  const source = artwork ?? radio.image.url
+  const title = metadata?.title ?? radio.name
+  return <div className="playing-info">
+    {source && source !== failed ? <img src={source} width="52" height="52" alt="" referrerPolicy="no-referrer" onError={() => setFailed(source)} />
+      : <span className="on-air-icon"><RadioTower size={22} aria-hidden="true" /></span>}
+    <div>{link ? <Link to={radioPath(radio.slug)}>{title}</Link> : <strong>{title}</strong>}
+      {metadata?.artist && <small>{metadata.artist}</small>}
+    </div>
+  </div>
+}
+
 export function PlayerBar() {
   const { radio, status, metadata, stop, volume, changeVolume, canSkip, skip, mainVisible } = useContext(Player)!
   if (!radio || mainVisible || (status !== 'playing' && status !== 'loading')) return null
   const message = playbackMessage[status]
   return <aside className="player-bar" aria-label="Player">
-    {radio.image.url && <img src={radio.image.url} width="52" height="52" alt="" />}
-    <div className="player-info"><Link to={radioPath(radio.slug)}>{radio.name}</Link>
-      <small role="status">{message}{metadata && " · " + [metadata.title, metadata.artist].filter(Boolean).join(" — ")}</small></div>
+    <div className="player-info"><NowPlayingInfo radio={radio} metadata={metadata} link />
+      {status === 'loading' && <small role="status">{message}</small>}</div>
     <div className="player-controls">
       <FavoriteButton slug={radio.slug} compact />
       {canSkip && <button className="icon-button player-skip" type="button" onClick={() => skip(-1)} aria-label="Rádio anterior"><SkipBack size={19} /></button>}
