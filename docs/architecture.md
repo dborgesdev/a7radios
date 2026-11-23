@@ -7,7 +7,7 @@ Frontend SPA React/Vite estático em `/`, WordPress existente em `/app/`, plugin
 ## Configuração de roteamento — ordem, não bloco de produção pronto
 
 1. Preservar `.htaccess` raiz existente, PHP WP e `/app/.htaccess`.
-2. Interceptar zero requisições de `/app/`, REST, admin, uploads ou arquivos existentes.
+2. Bloquear o acesso direto a `/app/wp-content/a7-radios-media/` antes de delegar as demais rotas `/app/` ao WordPress.
 3. Rota `/radio/{slug}/`: validar slug canônico e redirecionar internamente para handler WP, sem exposição de path alternativo ou loops. Retornar 200/301/404/410 de fato. Se o WP resolver `/radio/{slug}` fora de sua home `/app/`, tratar query vars e `request`/template route via plugin; validar com URL original, `REQUEST_URI`, canônico e SSL.
 4. `sitemap.xml` ou `sitemap-radios.xml`: handler WP ou geração estática, incluindo somente aprovadas; não colidir com `/app/wp-sitemap.xml`.
 5. Arquivos estáticos do build; depois fallback somente para rotas SPA conhecidas. Para caminhos desconhecidos, 404 real, não index shell.
@@ -32,6 +32,7 @@ Regras Apache precisam ser testadas, não coladas cegamente do Realmeidakits. Ar
 - `GET /app/wp-json/a7-radios/v1/me/radios/{id}` → snapshot próprio com histórico relevante.
 - `POST /app/wp-json/a7-radios/v1/me/radios/{id}/revisions` → submissão de **snapshot/diff pendente**, nunca publicação imediata.
 - `GET /app/wp-json/a7-radios/v1/me/dashboard` → contagens próprias.
+- `GET /app/wp-json/a7-radios/v1/me/categories` → categorias para cadastro. `GET /app/wp-json/a7-radios/v1/me/submission-settings` → termo vigente e disponibilidade de importação de imagem. Ambos exigem sessão e nonce.
 - Admin via wp-admin (actions/capabilities) e REST somente se comprovadamente útil; endpoint admin não é requisito para construir outro painel de administração.
 
 **PublicRadio** recomendado: `{id,slug,name,category:{id,slug,name},country,region,description,streamUrl,websiteUrl|null,appDownloadUrl|null,image:{url,width,height,alt},approvedUpdatedAt,visitCount?}`. URLs diretas e metadados de imagem já resolvidos no WordPress; sem outra consulta `/media/`. Sanitizar descrição para HTML público, não retornar IDs de usuário, revisão, termos ou dados privados. Limitar `per_page` e assegurar ordem estável. Normalizar dados externos e manter `WP_Error`/HTTP status coerentes.
@@ -46,7 +47,7 @@ Regras Apache precisam ser testadas, não coladas cegamente do Realmeidakits. Ar
 
 ## Segurança dos recursos remotos
 
-URL de stream será utilizada pelo navegador como fonte de áudio, não para `wp_remote_get()` do servidor. URLs de imagem remota requerem allowlist de protocolos, bloqueio de hosts/IPs privados e loopback inclusive após redirects/DNS, limites bytes/pixels/MIME/timeout, armazenar cópia segura antes de publicar; preferir `media_handle_upload()` para upload com validação WP. URL de app somente HTTPS, bloquear `javascript:`, `data:`, `file:`, credenciais na URL e caracteres inválidos. Links externos `rel="noopener noreferrer"`.
+URL de stream será utilizada pelo navegador como fonte de áudio, não para `wp_remote_get()` do servidor. URLs de imagem remota requerem allowlist de protocolos, bloqueio de hosts/IPs privados e loopback inclusive após redirects/DNS, limites bytes/pixels/MIME/timeout, armazenar cópia segura antes de publicar; validar e converter os uploads com o WP Image Editor, armazenando-os no diretório protegido do plugin. URL de app somente HTTPS, bloquear `javascript:`, `data:`, `file:`, credenciais na URL e caracteres inválidos. Links externos `rel="noopener noreferrer"`.
 
 ## Player e metadados
 
@@ -59,3 +60,12 @@ Render PHP indexável deve compartilhar a fonte de dados WP e emitir `<!doctype 
 ## Testes de segurança mínimos
 
 Dois proprietários A/B e um admin em base de homologação; acesso por IDs cruzados retorna 403/404; submissão, edição e exclusão de outros usuários não autorizadas; página pública permanece igual até aprovação; revisão rejeitada não altera dados; atualização em paralelo resolve conflito; uploads maliciosos e URL interna bloqueados; CSRF sem nonce rejeitado; alterações de categoria e status invalidam cache e sitemap; endpoint privado sem cache; perfis proprietários não entram em wp-admin administrativo; robots não substitui autorização. Testes não destrutivos com dados fictícios somente em staging.
+
+## Implementação V1
+
+- O frontend compilado e o manifesto Vite ficam na raiz Apache. O handler do plugin lê o URI original no início de `parse_request`, antes da escolha de template/canonical do WordPress. A página individual apresenta a versão publicada, player HTML nativo e links relacionados sem JS. Com JavaScript, o React monta sobre o mesmo conteúdo e usa o payload inicial enquanto revalida o detalhe. O catálogo, a home, o sitemap e a API leem a mesma fonte de dados.
+- O catálogo usa uma tabela InnoDB própria no banco do WordPress, com índices por situação, titular e categoria. O tipo privado `a7_radio` fornece o contexto da taxonomia nativa, enquanto identidades, versões e snapshots das rádios ficam na tabela. A escrita condicional na sequência e na versão atualiza o snapshot publicado, a revisão com aceite, o histórico e suas projeções em uma única operação. Mudanças em categorias cadastráveis entram nas respectivas páginas publicadas quando uma nova versão da rádio é aprovada.
+- Usuários, cookies, sessão e redefinição de senha são nativos do WordPress. O bootstrap e os formulários de sessão usam `admin-ajax.php?action=a7r_{session,login,register,recover,reset,logout}`. As ações POST de sessão verificam origem exata e token de formulário em cookie HttpOnly. Os endpoints privados REST verificam cookie, nonce WP, capability e titularidade e enviam `no-store`. As decisões administrativas passam por `admin-post.php` com nonce por rádio e capability.
+- Upload aceita PNG, JPEG e WebP até 5 MiB, 64 a 4096 px por lado e no máximo 12 megapixels. O WP Image Editor recorta no centro e grava PNG quadrado 512×512 em `/app/wp-content/a7-radios-media/`. O Apache bloqueia a pasta com uma regra na raiz e um `.htaccess` local. As importações por URL usam arquivos temporários nessa mesma pasta. As URLs públicas servem apenas a imagem da versão aprovada atual. A opção de importação HTTPS é desativada por padrão. Quando habilitada, exige cURL com TLS, DNS IPv4 público fixado na conexão, porta 443, rejeição de redirecionamentos e limites de transferência.
+- Visitas são aproximações de navegação na página individual com JS. Uma visita por IP e rádio em janelas fixas de 30 minutos, com limite global por IP. O controle armazena chaves HMAC temporárias e não usa cookies de rastreamento. WP-Cron elimina os buckets expirados.
+- Um elemento de áudio reproduz a URL aprovada diretamente. Quando o navegador expõe dados em trilha nativa de metadados, o player começa a escutá-la após `playing` e cancela em pausa, troca, erro ou encerramento. O logo e o nome são o fallback. Metadados ficam restritos às trilhas que o navegador expõe. A reprodução com streams reais e disponibilidade de metadados dependem de validação com emissoras cadastradas.

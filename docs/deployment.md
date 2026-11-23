@@ -38,3 +38,24 @@
 ## Publicação e rollback
 
 Publicar primeiro plugin homologado e assets hash; comparar/mesclar `.htaccess` raiz, preservar `/app/`; atualizar assets/index e páginas de SEO como conjunto; não acionar indexação enquanto QA, termos e privacidade estiverem pendentes. Após autorização de indexação, conferir sitemap, metatags, robots e painel Search Console (não presumir acesso). Em erro, restaurar **plugin + frontend + htaccess compatíveis** e, quando houver mudança de esquema não reversível, seguir plano de migração/backup; não sobrescrever banco com snapshot antigo sem reconciliar cadastros posteriores.
+
+## Configuração entregue
+
+O ZIP instalável contém a pasta `a7-radios/` do plugin. O build requer Node.js 22.12+ localmente. O servidor requer WordPress 6.6+, PHP 8.2+, MariaDB/MySQL com InnoDB, GD ou Imagick para imagens, HTTPS, permalinks REST e rewrite Apache. Habilite cURL e certificados locais válidos somente se usar importação remota. Compare esses requisitos com o ambiente real de hospedagem.
+
+Configure no `wp-config.php`, antes de `wp-settings.php`, usando o caminho real da conta:
+
+```php
+define('A7R_ORIGIN', 'https://a7radios.com.br');
+define('A7R_REGISTRATION', false);
+define('A7R_REMOTE_IMAGES', false);
+define('A7R_INDEX', false);
+```
+
+O plugin prepara `/app/wp-content/a7-radios-media/` com bloqueio Apache e usa a pasta se a regra da raiz e a proteção local estiverem presentes. Remova a constante antiga `A7R_MEDIA_DIR`. Siga o [guia de instalação](instalacao-hostgator.md) para validar o bloqueio. Inclua a pasta e o banco no backup e restaure-os juntos.
+
+Ative o plugin em homologação, cadastre categorias no menu A7 Rádios e publique somente os documentos já validados em **Documentos aprovados**. Libere `A7R_REGISTRATION` quando o fluxo de contas estiver autorizado. Configure o transporte do `wp_mail` e valide entrega e recuperação por e-mail. Deixe `A7R_INDEX` desligado até autorização de indexação e ajuste a visibilidade WordPress para permitir indexação quando autorizado. Use banco, arquivos e ambiente separados para homologação.
+
+Copie `dist/` com a pasta oculta `.vite/` e os assets com hash. Compare o `public/.htaccess` com as regras da raiz e mescle o bloco preservando as regras preexistentes e todo `/app/.htaccess`. O rewrite da raiz e das rotas conhecidas entrega o shell ou HTML pela mesma aplicação PHP, inclusive os cabeçalhos de páginas privadas. Rode `node scripts/test-local.mjs` em um ambiente descartável e reproduza o checklist de QA em homologação com a configuração de Apache/SSL/cache da HostGator. Verifique a identificação do IP em `REMOTE_ADDR` se houver CDN ou proxy confiável, configure a restauração de IP no servidor e evite confiar em cabeçalhos de cliente no plugin. Exclua sessões e áreas privadas do cache da CDN.
+
+Em rollback, mantenha o diretório de imagens e o banco de versões. Mantenha os bloqueios Apache da pasta de imagens ao restaurar outras regras e arquivos da raiz.
