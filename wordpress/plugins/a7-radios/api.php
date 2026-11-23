@@ -13,6 +13,7 @@ function register_api(): void {
         ['/me/category-suggestions', 'POST', 'suggest_category', __NAMESPACE__ . '\write_permission'],
         ['/categories', 'GET', 'public_categories', '__return_true'],
         ['/discovery', 'GET', 'discovery', '__return_true'],
+        ['/me/radios/(?P<id>\d+)/removal', 'POST', 'request_removal', __NAMESPACE__ . '\write_permission'],
         ['/me/categories', 'GET', 'category_options', __NAMESPACE__ . '\owner_permission'],
         ['/me/submission-settings', 'GET', static fn() => ['remoteImages' => remote_images_enabled(), 'terms' => public_document('terms')], __NAMESPACE__ . '\owner_permission'],
         ['/terms', 'GET', static fn() => public_document('terms'), '__return_true'],
@@ -116,7 +117,7 @@ function discovery(): array {
     global $wpdb;
     $table = table();
     $latest = $wpdb->get_results("SELECT * FROM $table WHERE status = 'approved' ORDER BY approved_at DESC, id DESC LIMIT 10", ARRAY_A);
-    $suggested = $wpdb->get_results("SELECT * FROM $table WHERE status = 'approved' ORDER BY RAND() LIMIT 8", ARRAY_A);
+    $suggested = $wpdb->get_results("SELECT * FROM $table WHERE status = 'approved' ORDER BY RAND() LIMIT 30", ARRAY_A);
     return ['latest' => array_map(__NAMESPACE__ . '\public_radio', $latest), 'suggested' => array_map(__NAMESPACE__ . '\public_radio', $suggested)];
 }
 
@@ -152,7 +153,9 @@ function owner_radios(\WP_REST_Request $request): array|\WP_Error {
     $id = $request->get_url_params()['id'] ?? null;
     if ($id !== null) {
         $row = owner_row((int) $id);
-        return is_wp_error($row) ? $row : own_radio($row);
+        if (is_wp_error($row)) return $row;
+        $removal = request_record('removal', removal_key((int) $id, get_current_user_id()));
+        return own_radio($row) + ['removalStatus' => $removal['status'] ?? null];
     }
     return array_map(__NAMESPACE__ . '\own_radio', rows_for_owner(get_current_user_id()));
 }
@@ -185,7 +188,16 @@ function submit_radio(\WP_REST_Request $request): \WP_REST_Response|\WP_Error {
     if (!$terms || $request['termsVersion'] !== $terms['version'] || $request['accepted'] !== '1') {
         return err('Aceite a versão vigente do Termo de Responsabilidade.', 422);
     }
-    $fields = validate_fields($request);
+    $suggestion_id = $request['categorySuggestion'];
+    $suggestion = null;
+    if ($suggestion_id !== null && $suggestion_id !== '') {
+        if (!is_string($suggestion_id) || !preg_match('/^[a-f0-9]{64}$/D', $suggestion_id)) return err('Sugestão inválida.', 422, 'categoryId');
+        $suggestion = request_record('category', $suggestion_id);
+        if (!$suggestion || (int) $suggestion['owner'] !== $owner || $suggestion['status'] === 'rejected') {
+            return err('A sugestão está indisponível. Escolha uma categoria.', 422, 'categoryId');
+        }
+    }
+    $fields = validate_fields($request, $suggestion);
     if (is_wp_error($fields)) return $fields;
     $previous = $data['revision']['fields']['asset'] ?? null;
     $asset = save_image($request, $previous);
@@ -197,6 +209,7 @@ function submit_radio(\WP_REST_Request $request): \WP_REST_Response|\WP_Error {
         'acceptance' => ['version' => $terms['version'], 'hash' => hash('sha256', $terms['content']),
             'user' => $owner, 'at' => gmdate(DATE_ATOM)],
     ];
+    if ($suggestion) $revision['categorySuggestion'] = ['id' => $suggestion_id, 'name' => $suggestion['name']];
     if ($row) {
         $data['revision'] = $revision;
         $id = change_radio($row, $data, [
@@ -213,7 +226,7 @@ function submit_radio(\WP_REST_Request $request): \WP_REST_Response|\WP_Error {
     return new \WP_REST_Response(own_radio(row_by_id($id)), 201);
 }
 
-function validate_fields(\WP_REST_Request $request): array|\WP_Error {
+function validate_fields(\WP_REST_Request $request, ?array $suggestion = null): array|\WP_Error {
     $fields = [];
     foreach (['name' => 100, 'country' => 80, 'region' => 80, 'city' => 100, 'description' => 2000] as $key => $limit) {
         $value = $request[$key] ?? '';
@@ -236,6 +249,11 @@ function validate_fields(\WP_REST_Request $request): array|\WP_Error {
     }
     $raw = $request['categoryId'];
     $term = is_scalar($raw) && ctype_digit((string) $raw) ? get_term((int) $raw, 'a7_radio_category') : null;
+    if (($raw === null || $raw === '' || $raw === '0') && $suggestion) {
+        $existing = get_term_by('slug', $suggestion['slug'], 'a7_radio_category');
+        if ($existing) $term = $existing;
+        else return $fields + ['categoryId' => 0, 'category' => ['id' => 0, 'slug' => '', 'name' => $suggestion['name']]];
+    }
     if (!$term || is_wp_error($term)) return err('Selecione uma categoria válida.', 422, 'categoryId');
     $fields['categoryId'] = $term->term_id;
     $fields['category'] = category_payload($term);

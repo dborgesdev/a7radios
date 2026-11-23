@@ -19,58 +19,6 @@ function require_moderator(): void {
     if (!headers_sent()) no_store();
 }
 
-function moderation_page(): void {
-    global $wpdb;
-    require_moderator();
-    $table = table();
-    $counts = $wpdb->get_results("SELECT status, COUNT(*) AS total FROM $table GROUP BY status", OBJECT_K);
-    $users = count_users();
-    $total = array_sum(array_map(static fn($row) => (int) $row->total, $counts));
-    $filter = isset($_GET['status']) && is_string($_GET['status']) ? sanitize_key($_GET['status']) : 'queue';
-    $id = isset($_GET['radio']) && is_scalar($_GET['radio']) ? absint($_GET['radio']) : 0;
-    ?>
-    <div class="wrap a7r-admin"><h1>A7 Rádios</h1>
-    <p><strong>Cadastradas:</strong> <?= esc_html($total) ?> ·
-    <strong>Aprovadas:</strong> <?= esc_html($counts['approved']->total ?? 0) ?> ·
-    <strong>Pendentes:</strong> <?= esc_html($counts['pending']->total ?? 0) ?> ·
-    <strong>Rejeitadas:</strong> <?= esc_html($counts['rejected']->total ?? 0) ?> ·
-    <strong>Usuários:</strong> <?= esc_html($users['avail_roles']['a7r_owner'] ?? 0) ?></p>
-    <p>
-    <?php foreach (['queue' => 'Fila de revisão', 'all' => 'Todas', 'approved' => 'Aprovadas', 'pending' => 'Pendentes', 'rejected' => 'Rejeitadas', 'archived' => 'Arquivadas'] as $key => $label): ?>
-        <a class="button <?= $filter === $key ? 'button-primary' : '' ?>" href="<?= esc_url(admin_url('admin.php?page=a7r&status=' . $key)) ?>"><?= esc_html($label) ?></a>
-    <?php endforeach; ?>
-    </p>
-    <?php if ($id): ?>
-        <?php $row = row_by_id($id); if ($row) review_panel($row); else echo '<p>Rádio indisponível.</p>'; ?>
-    <?php else:
-        $where = match ($filter) {
-            'queue' => 'WHERE pending = 1', 'approved','pending','rejected','archived' => $wpdb->prepare('WHERE status = %s', $filter),
-            default => ''
-        };
-        $page = max(1, min(100000, absint($_GET['paged'] ?? 1)));
-        $total_pages = (int) ceil(((int) $wpdb->get_var("SELECT COUNT(*) FROM $table $where")) / 30);
-        $sort = $filter === 'queue' ? 'submitted_at ASC, id ASC' : 'submitted_at DESC, id DESC';
-        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $table $where ORDER BY $sort LIMIT 30 OFFSET %d", ($page - 1) * 30), ARRAY_A);
-        ?>
-        <table class="widefat striped"><thead><tr><th>Rádio</th><th>Proprietário</th><th>Publicação</th><th>Revisão</th><th>Envio (UTC)</th><th>Ações</th></tr></thead><tbody>
-        <?php foreach ($rows as $row):
-            $revision = state($row)['revision'];
-            $owner = get_userdata((int) $row['owner']); ?>
-            <tr><td><a href="<?= esc_url(admin_url('admin.php?page=a7r&radio=' . $row['id'])) ?>"><?= esc_html($revision['fields']['name']) ?></a></td>
-            <td><?= esc_html($owner ? $owner->display_name : 'Conta indisponível') ?></td>
-            <td><span class="a7r-badge a7r-<?= esc_attr($row['status']) ?>"><?= esc_html(status_name($row['status'])) ?></span></td>
-            <td><span class="a7r-badge a7r-<?= esc_attr($revision['status']) ?>"><?= esc_html(status_name($revision['status'])) ?></span></td>
-            <td><?= esc_html($row['submitted_at']) ?></td>
-            <td><a class="button <?= $row['pending'] ? 'button-primary' : '' ?>" href="<?= esc_url(admin_url('admin.php?page=a7r&radio=' . $row['id'])) ?>"><?= $row['pending'] ? 'Analisar' : 'Ver detalhes' ?></a>
-            <?php if ($row['status'] === 'approved'): ?><a class="button" href="<?= esc_url(radio_url($row['slug'])) ?>" target="_blank" rel="noopener noreferrer">Ver Rádio</a><?php endif; ?></td></tr>
-        <?php endforeach; ?>
-        <?php if (!$rows): ?><tr><td colspan="6">Nenhuma rádio neste filtro.</td></tr><?php endif; ?>
-        </tbody></table>
-        <p><?= wp_kses_post(paginate_links(['total' => max(1, $total_pages), 'current' => $page])) ?></p>
-    <?php endif; ?></div>
-    <?php
-}
-
 function status_name(string $status): string {
     return ['pending' => 'Pendente', 'approved' => 'Aprovada', 'rejected' => 'Rejeitada', 'archived' => 'Arquivada'][$status] ?? $status;
 }
@@ -95,6 +43,7 @@ function review_panel(array $row): void {
         <td><?php review_value($row, $field, $before[$field] ?? null); ?></td><td><?php review_value($row, $field, $after[$field] ?? null); ?></td></tr>
     <?php endforeach; ?>
     </tbody></table>
+    <?php if ($row['status'] !== 'archived'): ?><p><a class="button" href="<?= esc_url(admin_url('admin.php?page=a7r&view=edit&radio=' . $row['id'])) ?>">Editar dados da Rádio</a></p><?php endif; ?>
     <p>Aceite: versão <?= esc_html($revision['acceptance']['version']) ?>, <?= esc_html($revision['acceptance']['at']) ?>.</p>
     <?php if ($row['pending'] || $row['status'] !== 'archived'): ?>
         <form method="post" action="<?= esc_url(admin_url('admin-post.php')) ?>">
@@ -104,11 +53,21 @@ function review_panel(array $row): void {
             <?php wp_nonce_field('a7r_decide_' . $row['id']); ?>
             <p><label for="a7r-reason">Motivo (obrigatório para rejeitar ou arquivar)</label><br>
             <textarea id="a7r-reason" name="reason" rows="3" maxlength="500" class="large-text"></textarea></p>
+            <?php if ($row['pending'] && isset($revision['categorySuggestion'])): ?>
+                <fieldset class="a7r-category-resolution"><legend>Sugestão: <?= esc_html($revision['categorySuggestion']['name']) ?></legend>
+                    <label>Categoria existente <select name="categoryId"><option value="">Usar categoria da proposta, se válida</option>
+                        <?php foreach (category_options() as $category): ?><option value="<?= esc_attr($category['id']) ?>"><?= esc_html($category['name']) ?></option><?php endforeach; ?>
+                    </select></label>
+                    <label><input type="checkbox" name="createCategory" value="1"> Criar a categoria sugerida</label>
+                    <label>Nome normalizado (opcional) <input name="categoryName" maxlength="80" placeholder="<?= esc_attr($revision['categorySuggestion']['name']) ?>"></label>
+                </fieldset>
+            <?php endif; ?>
             <?php if ($row['pending']): ?>
                 <button class="button button-primary" name="decision" value="approve">Aprovar</button>
                 <button class="button" name="decision" value="reject">Rejeitar</button>
             <?php endif; ?>
             <?php if ($row['status'] !== 'archived'): ?>
+                <label><input type="checkbox" name="confirmArchive" value="1"> Confirmo o arquivamento</label>
                 <button class="button" name="decision" value="archive">Arquivar</button>
             <?php endif; ?>
         </form>
@@ -121,11 +80,11 @@ function review_panel(array $row): void {
     <?php
 }
 
-function review_value(array $row, string $field, mixed $value): void {
+function review_value(array $row, string $field, mixed $value, bool $thumb = false): void {
     if ($field === 'asset' && $value) {
         $link = add_query_arg(['action' => 'a7r_review_image', 'id' => $row['id'], 'asset' => $value], admin_url('admin-post.php'));
         $link = wp_nonce_url($link, 'a7r_review_image_' . $row['id']);
-        echo '<img src="' . esc_url($link) . '" width="96" height="96" alt="Imagem para revisão">';
+        echo '<img src="' . esc_url($link) . ($thumb ? '" width="52" height="52" loading="lazy" alt="">' : '" width="96" height="96" alt="Imagem para revisão">');
     } else {
         echo nl2br(esc_html($field === 'category' ? ($value['name'] ?? '—') : ($value ?: '—')));
     }
@@ -155,16 +114,17 @@ function decide_action(): void {
     $reason = sanitize_textarea_field(form_value('reason'));
     $row = row_by_id($id);
     if (!$row || !in_array($decision, ['approve', 'reject', 'archive'], true) ||
-        strlen($reason) > 2000 || ($decision !== 'approve' && $reason === '')) {
+        strlen($reason) > 2000 || ($decision !== 'approve' && $reason === '') || ($decision === 'archive' && form_value('confirmArchive') !== '1')) {
         wp_die('Decisão inválida. Informe um motivo para rejeitar ou arquivar.', '', ['response' => 422, 'back_link' => true]);
     }
-    $result = moderate($row, (int) form_value('sequence'), $decision, $reason, get_current_user_id());
+    $category = ['id' => form_value('categoryId'), 'create' => form_value('createCategory') === '1', 'name' => sanitize_text_field(form_value('categoryName'))];
+    $result = moderate($row, (int) form_value('sequence'), $decision, $reason, get_current_user_id(), $category);
     if (is_wp_error($result)) wp_die(esc_html($result->get_error_message()), '', ['response' => 409, 'back_link' => true]);
     wp_safe_redirect(admin_url('admin.php?page=a7r&radio=' . $id), 303);
     exit;
 }
 
-function moderate(array $row, int $sequence, string $decision, string $reason, int $moderator): true|\WP_Error {
+function moderate(array $row, int $sequence, string $decision, string $reason, int $moderator, array $category = []): true|\WP_Error {
     $data = state($row);
     $revision = $data['revision'];
     $base = (int) $row['version'];
@@ -176,13 +136,13 @@ function moderate(array $row, int $sequence, string $decision, string $reason, i
     $columns = ['pending' => 0];
     if ($decision === 'approve') {
         $fields = $revision['fields'];
-        $now = gmdate('Y-m-d H:i:s');
-        $columns += [
-            'status' => 'approved', 'version' => $base + 1, 'approved_at' => $row['approved_at'] ?: $now, 'updated_at' => $now,
-            'published_name' => $fields['name'], 'category' => $fields['categoryId'],
-            'category_slug' => $fields['category']['slug'], 'category_name' => $fields['category']['name'],
-        ];
+        $resolved = moderation_category($revision, $category);
+        if (is_wp_error($resolved)) return $resolved;
+        $fields['category'] = category_payload($resolved);
+        $fields['categoryId'] = $resolved->term_id;
+        $columns += publication_columns($row, $fields);
         $data['published'] = $fields;
+        $revision['fields'] = $fields;
         $revision['status'] = 'approved';
     } elseif ($decision === 'reject') {
         $columns['status'] = $base ? 'approved' : 'rejected';
@@ -273,11 +233,11 @@ function legal_action(): void {
 add_action('current_screen', static function ($screen) {
     if (current_user_can('a7r_moderate') && in_array($screen->id, ['toplevel_page_a7r', 'a7-radios_page_a7r-legal', 'a7-radios_page_a7r-requests'], true)) no_store();
 });
-add_action('admin_enqueue_scripts', static function () {
+add_action('admin_enqueue_scripts', static function ($hook) {
     $page = isset($_GET['page']) && is_string($_GET['page']) ? sanitize_key($_GET['page']) : '';
-    if (!current_user_can('a7r_moderate') || !in_array($page, ['a7r', 'a7r-legal', 'a7r-requests'], true)) return;
-    wp_enqueue_style('a7r-admin', plugins_url('admin.css', __FILE__), [], '2.0.0');
-    if ($page === 'a7r-legal') wp_enqueue_script('a7r-admin', plugins_url('admin.js', __FILE__), [], '2.0.0', true);
+    if (!current_user_can('a7r_moderate') || ($hook !== 'index.php' && !in_array($page, ['a7r', 'a7r-legal', 'a7r-requests'], true))) return;
+    wp_enqueue_style('a7r-admin', plugins_url('admin.css', __FILE__), [], '2.1.0');
+    if (in_array($page, ['a7r', 'a7r-legal'], true)) wp_enqueue_script('a7r-admin', plugins_url('admin.js', __FILE__), [], '2.1.0', true);
 });
 
 add_action('wp_dashboard_setup', static function () {
@@ -293,15 +253,12 @@ function a7r_overview(): void {
     $links = [
         ['Cadastradas', $counts['total'] ?? 0, 'a7r&status=all'],
         ['Pendentes de aprovação', $counts['pending'] ?? 0, 'a7r&status=pending'],
-        ['Revisões pendentes', $counts['revisions'] ?? 0, 'a7r&status=queue'],
+        ['Revisões pendentes', $counts['revisions'] ?? 0, 'a7r&status=revisions'],
         ['Sugestões de categorias', pending_request_count('category'), 'a7r-requests&kind=category'],
         ['Pedidos de remoção', pending_request_count('removal'), 'a7r-requests&kind=removal'],
     ];
-    echo '<ul>';
-    foreach ($links as [$label, $count, $page]) {
-        echo '<li><a href="' . esc_url(admin_url('admin.php?page=' . $page)) . '">' . esc_html($label) . '</a> <strong>' . esc_html((int) $count) . '</strong></li>';
-    }
-    echo '</ul>';
+    $tones = ['total', 'pending', 'pending', 'approved', 'rejected'];
+    admin_metrics(array_map(static fn($link, $tone) => [...$link, $tone], $links, $tones));
     $rows = $wpdb->get_results("SELECT id, state FROM $table WHERE pending = 1 ORDER BY submitted_at, id LIMIT 4", ARRAY_A);
     if (!$rows) return;
     echo '<h3>Rádios aguardando análise</h3><ul>';

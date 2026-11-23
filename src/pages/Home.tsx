@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { AudioLines, Grid2X2, Headphones, Music2, RadioTower, Search } from 'lucide-react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 import { useApi } from '../api'
-import { Empty, RadioCards } from '../components/RadioCards'
+import { Empty } from '../components/RadioCards'
+import { RadioShelf } from '../components/RadioShelf'
 import type { Category, Radio } from '../domain'
 
 export function Home() {
@@ -43,14 +44,13 @@ export function Home() {
       </div>
     </section>
     <div className="shell home-content">
-      <section className="content-section">
-        <div className="section-heading"><div>
-          <h2>Rádios em destaque</h2></div><Link className="button secondary" to="/radios/">Ver catálogo</Link></div>
-        {discovery.loading && <div className="placeholder" role="status">Carregando rádios…</div>}
-        {discovery.error && <Empty>{discovery.error}</Empty>}
-        {discovery.data && (discovery.data.latest.length ? <RadioCards radios={discovery.data.latest} /> :
-          <Empty><strong>O catálogo está sendo preparado.</strong><p>As rádios aprovadas aparecerão aqui.</p></Empty>)}
-      </section>
+      {!!discovery.data?.latest.length && <RadioShelf id="novidades" title="Novidades" radios={discovery.data.latest}
+        action={<Link className="button secondary" to="/radios/">Ver catálogo</Link>} />}
+      {!discovery.data?.latest.length && <section className="content-section">
+        <div className="section-heading"><h2>Novidades</h2><Link className="button secondary" to="/radios/">Ver catálogo</Link></div>
+        {discovery.loading ? <div className="placeholder" role="status">Carregando rádios…</div> :
+          <Empty>{discovery.error ?? 'As rádios aprovadas aparecerão aqui.'}</Empty>}
+      </section>}
       <section className="content-section category-section" id="categorias">
         <div className="section-heading"><div>
           <h2>Explore por categoria</h2></div></div>
@@ -60,9 +60,7 @@ export function Home() {
           return <Link key={category.id} to={'/radios/?' + new URLSearchParams({ category: category.slug })}><Icon size={25} />{category.name}</Link>
         })}</div> : !categories.loading && !categories.error && <Empty>As categorias aparecem conforme as rádios são publicadas.</Empty>}
       </section>
-      {!!discovery.data?.suggested.length && <section className="content-section">
-        <div className="section-heading"><h2>Sugestões para você</h2></div><RadioCards radios={discovery.data.suggested} />
-      </section>}
+      {!!discovery.data?.suggested.length && <RadioShelf id="sugestoes" title="Sugestões para você" radios={discovery.data.suggested} />}
     </div>
   </>
 }

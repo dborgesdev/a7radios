@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Heart } from 'lucide-react'
+import { PageHero } from '../components/PageHero'
 import { Link } from 'react-router-dom'
 import { useApi } from '../api'
 import { Empty, RadioCards } from '../components/RadioCards'
@@ -20,16 +22,18 @@ export function Favorites() {
     const radio = bySlug.get(slug)
     return radio ? [radio] : []
   })
-  return <div className="shell page">
-    <h1>Favoritos</h1><p className="muted">Os favoritos ficam neste navegador e podem ser perdidos se você limpar os dados dele.</p>
+  return <>
+    <PageHero variant="favorites" eyebrow="Sua seleção" title="Favoritos" description="Volte direto para as emissoras que você gosta de ouvir." />
+    <section className="shell page" aria-label="Emissoras favoritas">
     {result.loading && <p role="status">Carregando favoritos…</p>}
     {result.error && <Empty>{result.error}</Empty>}
     {radios.length ? <RadioCards radios={radios} /> :
-      !result.loading && !result.error && <Empty><p>Nenhuma rádio disponível nesta página de favoritos.</p><Link to="/radios/">Explorar rádios</Link></Empty>}
+      !result.loading && !result.error && <div className="favorite-empty"><Heart size={34} aria-hidden="true" /><h2>Encontre suas favoritas</h2><p>Marque o coração no card de uma Rádio para encontrá-la aqui.</p><Link className="button primary" to="/radios/">Explorar rádios</Link></div>}
     {lastPage > 1 && <nav className="pagination" aria-label="Páginas de favoritos">
       {page > 1 && <button className="button secondary" onClick={() => setActivePage(page - 1)}>Anterior</button>}
       <span>Página {page} de {lastPage}</span>
       {page < lastPage && <button className="button secondary" onClick={() => setActivePage(page + 1)}>Próxima</button>}
     </nav>}
-  </div>
+    </section>
+  </>
 }

@@ -154,7 +154,20 @@ async function decide(decision, expected, supplied, reason = 'Decisão DEMO loca
   }), expected)
 }
 
-await decide('approve', 303)
+const initialQueue = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r&status=queue&s=' + radio.id), 200)
+const initialBulkNonce = initialQueue.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
+const initialSelection = initialQueue.match(/name="selected\[\]" value="([^"]+)"/)?.[1]
+assert.ok(initialBulkNonce && initialSelection?.startsWith(String(radio.id) + ':'))
+const initialBulk = form({ action: 'a7r_bulk', _wpnonce: initialBulkNonce, decision: 'approve', filter: 'queue' })
+initialBulk.append('selected[]', initialSelection)
+initialBulk.append('selected[]', '9999999999999999:1')
+const initialBulkResponse = await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: initialBulk })
+await verify(initialBulkResponse, 303)
+const bulkReportUrl = new URL(initialBulkResponse.headers.get('location'))
+const bulkReport = await verify(await admin.request(bulkReportUrl.pathname + bulkReportUrl.search), 200)
+assert.match(bulkReport, /Decisão registrada/)
+assert.match(bulkReport, /Rádio indisponível/)
+console.log('OK moderação em lote com sucesso e falha parcial no mesmo envio')
 const seoResponse = await anon.request(page)
 assert.match(seoResponse.headers.get('x-robots-tag'), /noindex/)
 const html = await verify(seoResponse, 200)
@@ -237,6 +250,19 @@ console.log('OK revisão pendente e rejeitada preservam publicação, aprovaçã
 
 if (process.env.A7_KEEP_DEMO === '1') console.log('DEMO local preservada: ' + origin + page)
 else {
+  const editor = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r&view=edit&radio=' + radio.id), 200)
+  const editNonce = editor.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
+  const sequence = editor.match(/name="sequence" value="([^"]+)"/)?.[1]
+  assert.ok(editNonce && sequence)
+  const adminEdit = { ...fields, name: revised + ' · administração', action: 'a7r_manual_edit', id: radio.id, sequence, _wpnonce: editNonce, reason: 'Correção DEMO' }
+  await verify(await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: form(adminEdit) }), 303)
+  assert.equal((await json(await anon.request(rest + '/radios/' + radio.slug), 200)).name, adminEdit.name)
+  await verify(await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: form(adminEdit) }), 409)
+  await verify(await ownerB.request(privatePath + '/removal', { method: 'POST', headers: { 'X-WP-Nonce': ownerB.nonce }, body: form({ reason: 'Isolamento DEMO' }) }), 404)
+  const ownerRemoval = () => ownerA.request(privatePath + '/removal', { method: 'POST', headers, body: form({ reason: 'Pedido privado DEMO' }) })
+  await verify(await ownerRemoval(), 201)
+  await verify(await ownerRemoval(), 409)
+  assert.equal((await json(await ownerA.request(privatePath, { headers }), 200)).removalStatus, 'pending')
   const removal = await anon.request(rest + '/radios/' + radio.id + '/removal', {
     method: 'POST', body: form({ name: 'Solicitante ' + suffix, email: suffix + '@example.test', reason: 'Motivo DEMO', evidence: 'Dados sintéticos para homologação.' }),
   })
@@ -252,12 +278,34 @@ else {
 if (!process.env.A7_KEEP_DEMO) {
   const category = 'Categoria DEMO ' + suffix
   const suggestion = rest + '/me/category-suggestions'
-  await verify(await ownerB.request(suggestion, { method: 'POST', headers: { 'X-WP-Nonce': ownerB.nonce }, body: form({ name: category }) }), 201)
+  const proposal = await json(await ownerB.request(suggestion, { method: 'POST', headers: { 'X-WP-Nonce': ownerB.nonce }, body: form({ name: category }) }), 201)
   await verify(await ownerB.request(suggestion, { method: 'POST', headers: { 'X-WP-Nonce': ownerB.nonce }, body: form({ name: category.toUpperCase() }) }), 409)
   const privateCategories = async () => json(await ownerB.request(rest + '/me/categories', { headers: { 'X-WP-Nonce': ownerB.nonce } }), 200)
   assert.equal((await privateCategories()).some(item => item.name === category), false)
-  await decideRequest('category', category)
-  assert.equal((await privateCategories()).some(item => item.name === category), true)
+  const categoryUpload = form({ ...fields, name: 'Categoria vinculada DEMO ' + suffix, categoryId: '', categorySuggestion: proposal.id, submissionKey: randomUUID() })
+  categoryUpload.set('image', logo, 'demo.png')
+  const linked = await json(await ownerB.request(rest + '/me/radios', { method: 'POST', headers: { 'X-WP-Nonce': ownerB.nonce }, body: categoryUpload }), 201)
+  assert.equal(linked.categorySuggestion.name, category)
+  const queue = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r&status=queue&s=' + linked.id), 200)
+  const bulkNonce = queue.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
+  const selection = queue.match(/name="selected\[\]" value="([^"]+)"/)?.[1]
+  assert.ok(bulkNonce && selection && queue.includes(category))
+  const bulk = async (decision, reason) => {
+    const data = form({ action: 'a7r_bulk', _wpnonce: bulkNonce, decision, reason, filter: 'queue' })
+    data.append('selected[]', selection)
+    const result = await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: data })
+    await verify(result, 303)
+    return verify(await admin.request(new URL(result.headers.get('location')).pathname + new URL(result.headers.get('location')).search), 200)
+  }
+  assert.match(await bulk('approve', ''), /Defina uma categoria válida/)
+  const review = await verify(await admin.request('/app/wp-admin/admin.php?page=a7r&radio=' + linked.id), 200)
+  const reviewNonce = review.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
+  const linkedSequence = selection.split(':')[1]
+  const normalized = 'Normalizada DEMO ' + suffix
+  await verify(await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: form({ action: 'a7r_decide', id: linked.id, sequence: linkedSequence, _wpnonce: reviewNonce, decision: 'approve', createCategory: 1, categoryName: normalized }) }), 303)
+  assert.equal((await json(await anon.request(rest + '/radios/' + linked.slug), 200)).category.name, normalized)
+  assert.equal((await privateCategories()).some(item => item.name === normalized), true)
+  assert.match(await bulk('approve', ''), /A versão mudou/)
   const dashboard = await verify(await admin.request('/app/wp-admin/index.php'), 200)
   assert.match(dashboard, /id="a7r_overview"/)
   console.log('OK sugestões de categorias, solicitações de remoção e widget administrativo')
@@ -292,7 +340,7 @@ async function decideRequest(kind, name) {
   const record = panel?.match(/name="record" value="([^"]+)"/)?.[1]
   assert.ok(nonce && record, 'Solicitação ausente na fila: ' + name)
   await verify(await admin.request('/app/wp-admin/admin-post.php', {
-    method: 'POST', body: form({ action: 'a7r_request_decision', _wpnonce: nonce, record, decision: 'approve', reason: 'Decisão DEMO local' }),
+    method: 'POST', body: form({ action: 'a7r_request_decision', _wpnonce: nonce, record, decision: 'approve', confirmArchive: 1, reason: 'Decisão DEMO local' }),
   }), 303)
 }
 

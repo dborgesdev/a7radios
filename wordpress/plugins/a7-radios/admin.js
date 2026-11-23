@@ -28,3 +28,15 @@ document.querySelectorAll('.a7r-editor').forEach(editor => {
     }
   })
 })
+
+document.querySelectorAll('.a7r-bulk').forEach(form => {
+  const master = form.querySelector('[data-a7r-select-all]')
+  const items = [...form.querySelectorAll('[data-a7r-row]:enabled')]
+  master.disabled = !items.length
+  master.addEventListener('change', () => items.forEach(item => { item.checked = master.checked }))
+  items.forEach(item => item.addEventListener('change', () => {
+    const count = items.filter(input => input.checked).length
+    master.checked = count === items.length
+    master.indeterminate = count > 0 && count < items.length
+  }))
+})

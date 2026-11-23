@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { PageHero } from '../components/PageHero'
 import { useAuth } from '../auth'
 
 const titles = { login: 'Entrar', register: 'Criar conta', recover: 'Recuperar senha', reset: 'Definir nova senha' }
@@ -28,8 +29,10 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' | 'recover' }) {
     } catch (error) { setFailure((error as Error).message) }
     finally { setBusy(false) }
   }
-  return <div className="shell page narrow">
-    <h1>{titles[action]}</h1>
+  return <>
+    <PageHero variant="auth" eyebrow="A7 Rádios On-Line" title={titles[action]}
+      description={mode === 'login' ? 'Acesse o painel da sua emissora.' : mode === 'register' ? 'Crie uma conta para cadastrar sua emissora.' : undefined} />
+    <section className="shell auth-panel form-panel" aria-label={titles[action]}>
     {mode === 'register' && value && !value.registration && <p>O cadastro de contas está indisponível no momento.</p>}
     {error && <p role="alert">{error}</p>}
     {failure && <p className="error" role="alert">{failure}</p>}
@@ -49,5 +52,6 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' | 'recover' }) {
       {mode !== 'login' && <Link to="/login/">Entrar</Link>}
       {mode === 'login' && <><Link to="/cadastro/">Criar conta</Link><Link to="/recuperar-senha/">Esqueci minha senha</Link></>}
     </div>
-  </div>
+    </section>
+  </>
 }

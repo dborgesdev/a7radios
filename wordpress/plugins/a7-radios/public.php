@@ -125,25 +125,31 @@ function html_page(string $title, string $description, ?string $canonical, bool 
     <nav class="navigation static-nav" aria-label="Navegação principal"><a href="/">Início</a><a href="/radios/">Rádios</a><a href="/#categorias">Categorias</a></nav>
     <a class="account" href="/login/">Entrar</a>
 </div></header>
-<main id="conteudo" class="main shell page">
+<main id="conteudo" class="main">
 <?php if ($radio): ?>
-    <nav class="breadcrumb" aria-label="Você está em"><a href="/">Início</a> / <a href="/radios/">Rádios</a></nav>
-    <div class="radio-detail">
-        <img class="cover" width="512" height="512" src="<?= esc_url($image) ?>" alt="<?= esc_attr($radio['image']['alt']) ?>">
-        <div><p class="eyebrow"><a href="<?= esc_url(add_query_arg('category', $radio['category']['slug'], '/radios/')) ?>"><?= esc_html($radio['category']['name']) ?></a></p>
-        <h1><?= esc_html($radio['name']) ?></h1>
-        <p class="muted"><?= esc_html(implode(', ', array_filter([$radio['city'] ?? '', $radio['region'], $radio['country']]))) ?></p>
-        <noscript><audio class="native-player" controls preload="none" src="<?= esc_url($radio['streamUrl']) ?>" aria-label="Ouvir Rádio"></audio></noscript></div>
-    </div>
-    <section class="about"><h2>Sobre a rádio</h2><p><?= esc_html($radio['description']) ?></p>
-        <div class="actions">
-            <?php if ($radio['websiteUrl']): ?><a class="button secondary" href="<?= esc_url($radio['websiteUrl']) ?>" target="_blank" rel="noopener noreferrer">Visitar site da Rádio</a><?php endif; ?>
-            <?php if ($radio['appDownloadUrl']): ?><a class="button secondary" href="<?= esc_url($radio['appDownloadUrl']) ?>" target="_blank" rel="noopener noreferrer">Baixar App</a><?php endif; ?>
+    <header class="station-hero"><div class="shell station-shell">
+        <nav class="breadcrumb" aria-label="Você está em"><a href="/">Início</a> / <a href="/radios/">Rádios</a></nav>
+        <div class="station-identity">
+            <div class="station-art"><img class="cover" width="512" height="512" src="<?= esc_url($image) ?>" alt="<?= esc_attr($radio['image']['alt']) ?>"></div>
+            <div class="station-copy"><p class="station-category"><a href="<?= esc_url(add_query_arg('category', $radio['category']['slug'], '/radios/')) ?>"><?= esc_html($radio['category']['name']) ?></a></p>
+            <h1><?= esc_html($radio['name']) ?></h1>
+            <p class="station-location"><?= esc_html(implode(', ', array_filter([$radio['city'] ?? '', $radio['region'], $radio['country']]))) ?></p>
+            <noscript><div class="integrated-player"><audio class="native-player" controls preload="none" src="<?= esc_url($radio['streamUrl']) ?>" aria-label="Ouvir Rádio"></audio>
+                <p class="station-visits"><?= esc_html(number_format_i18n($radio['visitCount'])) ?> <?= $radio['visitCount'] === 1 ? 'visita à página' : 'visitas à página' ?></p>
+            </div></noscript></div>
         </div>
-    </section>
-    <?php radio_links($radio); ?>
+    </div></header>
+    <div class="shell page station-body">
+        <section class="station-editorial content-section"><div><h2>Sobre a rádio</h2><p><?= esc_html($radio['description']) ?></p></div>
+            <?php if ($radio['websiteUrl'] || $radio['appDownloadUrl']): ?><div class="station-links">
+                <?php if ($radio['websiteUrl']): ?><a class="button secondary" href="<?= esc_url($radio['websiteUrl']) ?>" target="_blank" rel="noopener noreferrer">Visitar site da Rádio</a><?php endif; ?>
+                <?php if ($radio['appDownloadUrl']): ?><a class="button secondary" href="<?= esc_url($radio['appDownloadUrl']) ?>" target="_blank" rel="noopener noreferrer">Baixar App</a><?php endif; ?>
+            </div><?php endif; ?>
+        </section>
+        <?php radio_links($radio); ?>
+    </div>
 <?php else: ?>
-    <h1><?= esc_html($route === '/' ? 'Do Brasil para o mundo' : $body_title) ?></h1>
+    <div class="shell page"><h1><?= esc_html($route === '/' ? 'Do Brasil para o mundo' : $body_title) ?></h1>
     <?php if ($status === 404 || in_array($route, ['/', '/radios'], true)): ?>
         <p><?= esc_html($description) ?></p>
     <?php else: ?>
@@ -153,7 +159,7 @@ function html_page(string $title, string $description, ?string $canonical, bool 
         <?php else: ?><noscript><p>Ative o JavaScript para usar esta página.</p></noscript><?php endif; ?>
     <?php endif; ?>
     <?php if ($route === '/' || $route === '/radios'): radio_links(); endif; ?>
-    <?php if ($route !== '/radios'): ?><p><a href="/radios/">Explorar rádios</a></p><?php endif; ?>
+    <?php if ($route !== '/radios'): ?><p><a href="/radios/">Explorar rádios</a></p><?php endif; ?></div>
 <?php endif; ?>
 </main>
 <footer class="site-footer"><div class="shell footer-inner">
@@ -181,7 +187,7 @@ function radio_links(?array $radio = null): void {
     $limit = $radio ? 4 : 10;
     $rows = $wpdb->get_results("SELECT slug, published_name FROM $table WHERE status = 'approved' $where ORDER BY approved_at DESC, id DESC LIMIT $limit", ARRAY_A);
     if (!$rows) return;
-    echo '<section><h2>' . ($radio ? 'Você também pode gostar' : 'Rádios em destaque') . '</h2><ul>';
+    echo '<section><h2>' . ($radio ? 'Você também pode gostar' : 'Novidades') . '</h2><ul>';
     foreach ($rows as $row) {
         echo '<li><a href="' . esc_url(radio_url($row['slug'])) . '">' . esc_html($row['published_name']) . '</a></li>';
     }
