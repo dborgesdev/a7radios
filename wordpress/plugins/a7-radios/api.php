@@ -9,17 +9,20 @@ function register_api(): void {
         ['/radios', 'GET', 'catalog', '__return_true'],
         ['/radios/(?P<slug>[a-z0-9-]{1,180})', 'GET', 'radio_detail', '__return_true'],
         ['/radios/(?P<id>\d+)/visit', 'POST', 'visit', __NAMESPACE__ . '\origin_permission'],
+        ['/radios/(?P<id>\d+)/removal', 'POST', 'request_removal', __NAMESPACE__ . '\origin_permission'],
+        ['/me/category-suggestions', 'POST', 'suggest_category', __NAMESPACE__ . '\write_permission'],
         ['/categories', 'GET', 'public_categories', '__return_true'],
         ['/discovery', 'GET', 'discovery', '__return_true'],
         ['/me/categories', 'GET', 'category_options', __NAMESPACE__ . '\owner_permission'],
-        ['/me/submission-settings', 'GET', static fn() => ['remoteImages' => remote_images_enabled(), 'terms' => legal('terms')], __NAMESPACE__ . '\owner_permission'],
-        ['/terms', 'GET', static fn() => legal('terms'), '__return_true'],
-        ['/privacy', 'GET', static fn() => legal('privacy'), '__return_true'],
+        ['/me/submission-settings', 'GET', static fn() => ['remoteImages' => remote_images_enabled(), 'terms' => public_document('terms')], __NAMESPACE__ . '\owner_permission'],
+        ['/terms', 'GET', static fn() => public_document('terms'), '__return_true'],
+        ['/privacy', 'GET', static fn() => public_document('privacy'), '__return_true'],
         ['/images/(?P<id>\d+)/(?P<asset>[a-f0-9]{48})', 'GET', 'public_image', '__return_true'],
         ['/me/radios', 'GET', 'owner_radios', __NAMESPACE__ . '\owner_permission'],
         ['/me/radios', 'POST', 'submit_radio', __NAMESPACE__ . '\write_permission'],
         ['/me/radios/(?P<id>\d+)', 'GET', 'owner_radios', __NAMESPACE__ . '\owner_permission'],
         ['/me/radios/(?P<id>\d+)/revisions', 'POST', 'submit_radio', __NAMESPACE__ . '\write_permission'],
+        ['/me/radios/(?P<id>\d+)/image/(?P<asset>[a-f0-9]{48})', 'GET', 'owner_image', __NAMESPACE__ . '\owner_permission'],
         ['/me/dashboard', 'GET', 'dashboard', __NAMESPACE__ . '\owner_permission'],
     ];
     foreach ($routes as [$route, $method, $callback, $permission]) {
@@ -34,7 +37,7 @@ function register_api(): void {
 add_filter('rest_post_dispatch', static function ($response, $server, $request) {
     $route = $request->get_route();
     if (!str_starts_with($route, '/' . REST . '/')) return $response;
-    if (str_starts_with($route, '/' . REST . '/me/')) {
+    if (str_starts_with($route, '/' . REST . '/me/') || str_ends_with($route, '/removal') || str_ends_with($route, '/visit')) {
         $response->header('Cache-Control', 'private, no-store, max-age=0');
     } else {
         $response->header('Cache-Control', 'no-cache');
@@ -78,7 +81,7 @@ function catalog(\WP_REST_Request $request): array {
     $search = is_string($request['search']) ? sanitize_text_field(substr($request['search'], 0, 300)) : '';
     if ($search !== '') {
         $pattern = '%' . $wpdb->esc_like($search) . '%';
-        $where .= $wpdb->prepare(' AND (published_name LIKE %s OR category_name LIKE %s)', $pattern, $pattern);
+        $where .= $wpdb->prepare(" AND (published_name LIKE %s OR category_name LIKE %s OR JSON_UNQUOTE(JSON_EXTRACT(state, '$.published.city')) LIKE %s)", $pattern, $pattern, $pattern);
     }
     if (is_string($request['category']) && $request['category'] !== '') {
         $where .= $wpdb->prepare(' AND category_slug = %s', substr($request['category'], 0, 200));
@@ -121,11 +124,16 @@ function visit(\WP_REST_Request $request): \WP_REST_Response|\WP_Error {
     global $wpdb;
     $row = row_by_id((int) $request->get_url_params()['id']);
     if (!$row || $row['status'] !== 'approved') return err('Rádio indisponível.', 404);
+    $count = (int) $row['visits'];
     if (permit('visit-global', ip(), 30, 900) && permit('visit:' . $row['id'], ip(), 1, 1800)) {
         $table = table();
-        $wpdb->query($wpdb->prepare("UPDATE $table SET visits = visits + 1 WHERE id = %d AND status = 'approved'", $row['id']));
+        if ($wpdb->query($wpdb->prepare("UPDATE $table SET visits = visits + 1 WHERE id = %d AND status = 'approved'", $row['id']))) {
+            $count = (int) $wpdb->get_var($wpdb->prepare("SELECT visits FROM $table WHERE id = %d", $row['id']));
+        }
     }
-    return new \WP_REST_Response(null, 204, ['Cache-Control' => 'no-store']);
+    $response = new \WP_REST_Response(null, 204);
+    $response->header('X-A7-Visit-Count', (string) $count);
+    return $response;
 }
 
 function public_image(\WP_REST_Request $request): \WP_Error {
@@ -207,12 +215,12 @@ function submit_radio(\WP_REST_Request $request): \WP_REST_Response|\WP_Error {
 
 function validate_fields(\WP_REST_Request $request): array|\WP_Error {
     $fields = [];
-    foreach (['name' => 100, 'country' => 80, 'region' => 80, 'description' => 2000] as $key => $limit) {
+    foreach (['name' => 100, 'country' => 80, 'region' => 80, 'city' => 100, 'description' => 2000] as $key => $limit) {
         $value = $request[$key] ?? '';
         if (!is_string($value)) return err('Campo inválido.', 422, $key);
         $value = $key === 'description' ? sanitize_textarea_field($value) : sanitize_text_field($value);
         $length = function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
-        if (($key !== 'region' && $value === '') || $length > $limit) return err('Preencha o campo dentro do limite de ' . $limit . ' caracteres.', 422, $key);
+        if ((!in_array($key, ['region', 'city'], true) && $value === '') || $length > $limit) return err('Preencha o campo dentro do limite de ' . $limit . ' caracteres.', 422, $key);
         $fields[$key] = $value;
     }
     if ($fields['country'] === 'Brasil' && !in_array($fields['region'], explode(' ', 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'), true)) {
@@ -232,4 +240,13 @@ function validate_fields(\WP_REST_Request $request): array|\WP_Error {
     $fields['categoryId'] = $term->term_id;
     $fields['category'] = category_payload($term);
     return $fields;
+}
+
+function owner_image(\WP_REST_Request $request): \WP_Error {
+    $params = $request->get_url_params();
+    $row = owner_row((int) $params['id']);
+    if (is_wp_error($row)) return $row;
+    $asset = state($row)['revision']['fields']['asset'] ?? '';
+    if (!$asset || !hash_equals($asset, $params['asset'])) return err('Imagem indisponível.', 404);
+    return image_output($asset, false);
 }

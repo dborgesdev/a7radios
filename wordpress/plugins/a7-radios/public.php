@@ -49,9 +49,19 @@ function render_route(): void {
     if (!isset($routes[$route]) && !$is_owner) return;
     $is_catalog = in_array($route, ['/', '/radios'], true);
     $index = $is_catalog && empty($_SERVER['QUERY_STRING']) && index_enabled() && has_published();
-    $canonical = $is_catalog ? origin() . ($route === '/' ? '/' : '/radios/') : null;
+    $canonical = $is_owner ? null : origin() . ($route === '/' ? '/' : $route . '/');
+    $descriptions = [
+        '/' => 'Encontre rádios online e ouça suas emissoras favoritas em um só lugar.',
+        '/radios' => 'Consulte o catálogo da A7 Rádios e encontre emissoras por nome, categoria ou cidade.',
+        '/favoritos' => 'Acesse as Rádios que você marcou como favoritas neste navegador.',
+        '/login' => 'Entre na sua conta para cadastrar e acompanhar suas Rádios.',
+        '/cadastro' => 'Crie uma conta de proprietário na A7 Rádios On-Line.',
+        '/recuperar-senha' => 'Solicite um link para redefinir a senha da sua conta A7 Rádios.',
+        '/termos' => 'Consulte o Termo de Responsabilidade vigente na A7 Rádios On-Line.',
+        '/privacidade' => 'Consulte a Política de Privacidade vigente na A7 Rádios On-Line.',
+    ];
     html_page($routes[$route] ?? 'Painel | A7 Rádios',
-        'Encontre rádios online e ouça suas emissoras favoritas em um só lugar.', $canonical, $index, 200, null, $route);
+        $descriptions[$route] ?? 'Gerencie suas Rádios e acompanhe os envios para análise.', $canonical, $index, 200, null, $route);
 }
 
 function has_published(): bool {
@@ -83,7 +93,7 @@ function html_page(string $title, string $description, ?string $canonical, bool 
 <html lang="pt-BR"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#fbf9f6">
+<meta name="theme-color" content="#111013">
 <title><?= esc_html($title) ?></title>
 <meta name="description" content="<?= esc_attr($description) ?>">
 <meta name="robots" content="<?= $index ? 'index, follow' : 'noindex, nofollow' ?>">
@@ -111,7 +121,7 @@ function html_page(string $title, string $description, ?string $canonical, bool 
 </head><body><div id="root">
 <a class="skip" href="#conteudo">Ir para o conteúdo</a>
 <header class="site-header"><div class="shell header-inner">
-    <a class="brand" href="/"><img src="/a7-logo.png" width="100" height="69" alt="A7 Rádios On-Line"></a>
+    <a class="brand" href="/"><img src="/a7-logo.webp" width="212" height="45" alt="A7 Rádios On-Line"></a>
     <nav class="navigation static-nav" aria-label="Navegação principal"><a href="/">Início</a><a href="/radios/">Rádios</a><a href="/#categorias">Categorias</a></nav>
     <a class="account" href="/login/">Entrar</a>
 </div></header>
@@ -122,13 +132,13 @@ function html_page(string $title, string $description, ?string $canonical, bool 
         <img class="cover" width="512" height="512" src="<?= esc_url($image) ?>" alt="<?= esc_attr($radio['image']['alt']) ?>">
         <div><p class="eyebrow"><a href="<?= esc_url(add_query_arg('category', $radio['category']['slug'], '/radios/')) ?>"><?= esc_html($radio['category']['name']) ?></a></p>
         <h1><?= esc_html($radio['name']) ?></h1>
-        <p class="muted"><?= esc_html(implode(', ', array_filter([$radio['region'], $radio['country']]))) ?></p>
-        <noscript><audio class="native-player" controls preload="none" src="<?= esc_url($radio['streamUrl']) ?>" aria-label="Ouvir rádio"></audio></noscript></div>
+        <p class="muted"><?= esc_html(implode(', ', array_filter([$radio['city'] ?? '', $radio['region'], $radio['country']]))) ?></p>
+        <noscript><audio class="native-player" controls preload="none" src="<?= esc_url($radio['streamUrl']) ?>" aria-label="Ouvir Rádio"></audio></noscript></div>
     </div>
     <section class="about"><h2>Sobre a rádio</h2><p><?= esc_html($radio['description']) ?></p>
         <div class="actions">
-            <?php if ($radio['websiteUrl']): ?><a class="button secondary" href="<?= esc_url($radio['websiteUrl']) ?>" target="_blank" rel="noopener noreferrer">Visitar site da rádio</a><?php endif; ?>
-            <?php if ($radio['appDownloadUrl']): ?><a class="button secondary" href="<?= esc_url($radio['appDownloadUrl']) ?>" target="_blank" rel="noopener noreferrer">Baixar app</a><?php endif; ?>
+            <?php if ($radio['websiteUrl']): ?><a class="button secondary" href="<?= esc_url($radio['websiteUrl']) ?>" target="_blank" rel="noopener noreferrer">Visitar site da Rádio</a><?php endif; ?>
+            <?php if ($radio['appDownloadUrl']): ?><a class="button secondary" href="<?= esc_url($radio['appDownloadUrl']) ?>" target="_blank" rel="noopener noreferrer">Baixar App</a><?php endif; ?>
         </div>
     </section>
     <?php radio_links($radio); ?>
@@ -137,15 +147,19 @@ function html_page(string $title, string $description, ?string $canonical, bool 
     <?php if ($status === 404 || in_array($route, ['/', '/radios'], true)): ?>
         <p><?= esc_html($description) ?></p>
     <?php else: ?>
-        <noscript><p>Ative o JavaScript para usar esta página.</p></noscript>
+        <?php if (in_array($route, ['/termos', '/privacidade'], true)): ?>
+            <?php $entry = legal($route === '/termos' ? 'terms' : 'privacy'); ?>
+            <?php if ($entry): ?><div class="document-body"><?= document_html($entry) ?></div><?php else: ?><p>O documento aguarda publicação.</p><?php endif; ?>
+        <?php else: ?><noscript><p>Ative o JavaScript para usar esta página.</p></noscript><?php endif; ?>
     <?php endif; ?>
     <?php if ($route === '/' || $route === '/radios'): radio_links(); endif; ?>
     <?php if ($route !== '/radios'): ?><p><a href="/radios/">Explorar rádios</a></p><?php endif; ?>
 <?php endif; ?>
 </main>
 <footer class="site-footer"><div class="shell footer-inner">
-    <a href="/"><img src="/a7-logo.png" width="100" height="69" alt="A7 Rádios On-Line"></a>
-    <div><a href="/termos/">Termos</a><a href="/privacidade/">Privacidade</a></div>
+    <a href="/"><img src="/a7-logo.webp" width="212" height="45" alt="A7 Rádios On-Line"></a>
+    <div><a href="/termos/">Termo de Responsabilidade</a><a href="/privacidade/">Política de Privacidade</a></div>
+    <small>© <?= esc_html(wp_date('Y')) ?> A7 Rádios On-Line</small>
     <a href="https://smartlocal.com.br" target="_blank" rel="noopener noreferrer">Desenvolvido por Douglas Borges - Smart Local</a>
 </div></footer>
 </div>
@@ -167,7 +181,7 @@ function radio_links(?array $radio = null): void {
     $limit = $radio ? 4 : 10;
     $rows = $wpdb->get_results("SELECT slug, published_name FROM $table WHERE status = 'approved' $where ORDER BY approved_at DESC, id DESC LIMIT $limit", ARRAY_A);
     if (!$rows) return;
-    echo '<section><h2>' . ($radio ? 'Rádios relacionadas' : 'Adicionadas recentemente') . '</h2><ul>';
+    echo '<section><h2>' . ($radio ? 'Você também pode gostar' : 'Rádios em destaque') . '</h2><ul>';
     foreach ($rows as $row) {
         echo '<li><a href="' . esc_url(radio_url($row['slug'])) . '">' . esc_html($row['published_name']) . '</a></li>';
     }

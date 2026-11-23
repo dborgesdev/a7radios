@@ -27,6 +27,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return json<T>(rest + path, init)
 }
 
+export async function recordVisit(id: number) {
+  const response = await fetch(rest + '/radios/' + id + '/visit', { method: 'POST', credentials: 'same-origin' })
+  const count = response.headers.get('X-A7-Visit-Count')
+  return response.ok && count !== null ? Number(count) : undefined
+}
+
 export function session() {
   return demo
     ? Promise.resolve({ authenticated: false, csrf: '', registration: false })

@@ -141,10 +141,12 @@ function own_radio(array $row): array {
     $data = state($row);
     $revision = $data['revision'];
     $draft = $revision['fields'];
+    $asset = $draft['asset'];
     unset($draft['asset'], $draft['category']);
     return [
         'id' => (int) $row['id'], 'slug' => $row['slug'], 'status' => $row['status'],
         'version' => (int) $row['version'], 'revisionId' => $revision['id'],
+        'imagePath' => '/app/wp-json/a7-radios/v1/me/radios/' . $row['id'] . '/image/' . $asset,
         'revisionStatus' => $revision['status'], 'submittedAt' => $revision['submittedAt'],
         'reason' => $revision['reason'] ?? '', 'categoryName' => $revision['fields']['category']['name'], 'draft' => $draft,
         'history' => array_map(static fn($item) => [
