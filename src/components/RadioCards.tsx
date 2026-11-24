@@ -2,7 +2,6 @@ import { AudioLines, Radio as RadioIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { radioPath, locationLabel, type Radio } from '../domain'
 import { FavoriteButton } from '../favorites'
-import { PlayButton } from '../player'
 import { useState, type CSSProperties, type ComponentPropsWithRef } from 'react'
 
 export function Cover({ radio, eager = false }: { radio: Radio; eager?: boolean }) {
@@ -20,13 +19,17 @@ export function RadioCards({ radios, compactLocation = false, shelf }: { radios:
   const { label, ...track } = shelf ?? {}
   return <ul {...track} className={shelf ? 'radio-grid radio-track' : 'radio-grid'} tabIndex={shelf ? 0 : undefined} aria-label={label}>
     {radios.map((radio, index) => <li className="radio-card" key={radio.id} style={{ '--delay': Math.min(index, 9) * 35 + 'ms' } as CSSProperties}>
-      <div className="cover-wrap"><Cover radio={radio} />
+      <div className="cover-wrap">
+        <Link className="radio-card-link" to={radioPath(radio.slug)} aria-label={radio.name}>
+          <Cover radio={radio} />
+          <div className="card-info">
+            <p className="eyebrow">{radio.category.name}</p>
+            <h3>{radio.name}</h3>
+            <p className="muted location">{compactLocation ? [radio.region, radio.country].filter(Boolean).join(', ') : locationLabel(radio)}</p>
+          </div>
+        </Link>
         <FavoriteButton slug={radio.slug} compact />
-      <div className="card-info"><p className="eyebrow">{radio.category.name}</p>
-        <h3><Link to={radioPath(radio.slug)}>{radio.name}</Link></h3>
-        <p className="muted location">{compactLocation ? [radio.region, radio.country].filter(Boolean).join(', ') : locationLabel(radio)}</p>
-        {radio.streamUrl ? <PlayButton radio={radio} queue={radios} compact /> : <Link className="play-icon" aria-label={'Ver ' + radio.name} to={radioPath(radio.slug)}><AudioLines size={19} /></Link>}
-      </div></div>
+      </div>
     </li>)}
   </ul>
 }

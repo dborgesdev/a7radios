@@ -1,20 +1,32 @@
 import { createContext, useContext, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
-import { Pause, Play, SkipBack, SkipForward, Volume2, X, RadioTower, Square } from 'lucide-react'
+import { Pause, Play, Volume2, X, RadioTower, Square } from 'lucide-react'
 import { listenToMetadata, type NowPlaying } from './metadata'
 import { FavoriteButton } from './favorites'
 import { Link } from 'react-router-dom'
 import { radioPath, type Radio } from './domain'
 
+type PlaybackClock = { elapsed: number; startedAt: number | null }
+const idleClock: PlaybackClock = { elapsed: 0, startedAt: null }
+
 type Playback = 'loading' | 'playing' | 'paused' | 'error'
-type PlayerState = { mainVisible: boolean; setMainVisible: (visible: boolean) => void; radio?: Radio; status: Playback; metadata?: NowPlaying; toggle: (radio: Radio, queue?: Radio[]) => void; skip: (offset: number) => void; canSkip: boolean; autoplay: (radio: Radio) => void; stop: () => void; volume: number; changeVolume: (value: number) => void }
+type PlayerState = { mainVisible: boolean; setMainVisible: (visible: boolean) => void; radio?: Radio; status: Playback; metadata?: NowPlaying; toggle: (radio: Radio) => void; clock: PlaybackClock; autoplay: (radio: Radio) => void; stop: () => void; volume: number; changeVolume: (value: number) => void }
 const Player = createContext<PlayerState | null>(null)
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audio = useRef<HTMLAudioElement>(null)
   const generation = useRef(0)
   const [radio, setRadio] = useState<Radio>()
-  const [queue, setQueue] = useState<Radio[]>([])
   const [status, setStatus] = useState<Playback>('paused')
+  const [clock, setClock] = useState(idleClock)
+  function transition(next: Playback, reset = false) {
+    const now = performance.now()
+    setStatus(next)
+    setClock(previous => {
+      if (reset) return idleClock
+      if (next === 'playing') return previous.startedAt === null ? { ...previous, startedAt: now } : previous
+      return previous.startedAt === null ? previous : { elapsed: previous.elapsed + now - previous.startedAt, startedAt: null }
+    })
+  }
   const [volume, setVolume] = useState(1)
   const [mainVisible, setMainVisible] = useState(false)
   const [metadata, setMetadata] = useState<NowPlaying>()
@@ -33,16 +45,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!element) return
     const ticket = ++generation.current
     clearMetadata()
-    if (radio?.id === next.id && !element.paused) { element.pause(); setStatus('paused'); return }
+    if (radio?.id === next.id && !element.paused) { element.pause(); transition('paused'); return }
     if (radio?.id !== next.id || status === 'error') {
       element.pause()
       element.src = next.streamUrl
     }
     setRadio(next)
-    setStatus('loading')
+    transition('loading', radio?.id !== next.id)
     void element.play().catch((error: unknown) => {
       if (ticket !== generation.current) return
-      setStatus(error instanceof DOMException && error.name === 'NotAllowedError' ? 'paused' : 'error')
+      transition(error instanceof DOMException && error.name === 'NotAllowedError' ? 'paused' : 'error')
       if (automatic && element.paused) clearMetadata()
     })
   }
@@ -53,19 +65,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.current?.removeAttribute('src')
     audio.current?.load()
     setRadio(undefined)
-    setQueue([])
-    setStatus('paused')
+    transition('paused', true)
   }
-  const queueIndex = queue.findIndex(item => item.id === radio?.id)
-  function toggle(next: Radio, nextQueue?: Radio[]) {
-    if (nextQueue) setQueue(nextQueue.filter(item => item.streamUrl))
-    else if (next.id !== radio?.id) setQueue([])
-    play(next)
-  }
-  function skip(offset: number) {
-    if (queueIndex >= 0 && queue.length > 1) play(queue[(queueIndex + offset + queue.length) % queue.length])
-  }
-  return <Player.Provider value={{ mainVisible, setMainVisible, radio, status, metadata, toggle, skip, canSkip: queueIndex >= 0 && queue.length > 1, autoplay: next => {
+  return <Player.Provider value={{ mainVisible, setMainVisible, radio, status, metadata, toggle: next => play(next), clock, autoplay: next => {
     if (radio || !next.streamUrl) return
     play(next, true)
   }, stop, volume, changeVolume: value => { if (audio.current) audio.current.volume = value } }}>
@@ -74,13 +76,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       onPlaying={() => {
         const element = audio.current
         if (!element || element.paused) return
-        setStatus('playing')
+        transition('playing')
         stopMetadata.current ??= listenToMetadata(element, setMetadata)
       }}
-      onWaiting={() => { if (!audio.current?.paused) setStatus('loading') }}
-      onEnded={() => { clearMetadata(); setStatus('paused') }}
-      onPause={() => { if (audio.current?.paused) { clearMetadata(); setStatus(old => old === 'error' ? old : 'paused') } }}
-      onError={() => { if (audio.current?.getAttribute('src')) { clearMetadata(); setStatus('error') } }} />
+      onWaiting={() => { if (!audio.current?.paused) transition('loading') }}
+      onEnded={() => { clearMetadata(); transition('paused', true) }}
+      onPause={() => { if (audio.current?.paused) { clearMetadata(); transition(audio.current.error ? 'error' : 'paused') } }}
+      onError={() => { if (audio.current?.getAttribute('src')) { clearMetadata(); transition('error') } }} />
     {children}
   </Player.Provider>
 }
@@ -97,11 +99,11 @@ export function useDirectAutoplay(radio: Radio, direct: boolean) {
   }, [direct])
 }
 
-export function PlayButton({ radio, compact = false, queue }: { radio: Radio; compact?: boolean; queue?: Radio[] }) {
+export function PlayButton({ radio, compact = false }: { radio: Radio; compact?: boolean }) {
   const player = useContext(Player)!
   const active = player.radio?.id === radio.id && ['loading', 'playing'].includes(player.status)
   return <button className={compact ? 'play-icon' : 'button primary'} type="button"
-    onClick={() => player.toggle(radio, queue)} disabled={!radio.streamUrl}
+    onClick={() => player.toggle(radio)} disabled={!radio.streamUrl}
     aria-label={(active ? 'Pausar ' : 'Ouvir ') + radio.name}>
     {active ? <Pause size={20} /> : <Play size={20} />}
     {!compact && (active ? 'Pausar' : 'Ouvir Rádio')}
@@ -131,15 +133,23 @@ export function IntegratedPlayer({ radio }: { radio: Radio }) {
     return () => { observer.disconnect(); setMainVisible(false) }
   }, [setMainVisible])
   const current = player.radio?.id === radio.id
-  return <section ref={panel} className="integrated-player" aria-label="Player da Rádio">
+  const playing = player.status === 'playing'
+  return <section ref={panel} className="integrated-player grid grid-cols-[minmax(0,1fr)_auto] min-[1101px]:grid-cols-[minmax(0,1fr)_auto_auto]" aria-label="Player da Rádio">
     <div className="integrated-status">
       <NowPlayingInfo radio={current ? radio : player.radio ?? radio} metadata={player.metadata} />
       {current && player.status !== 'playing' && <small role="status">{playbackMessage[player.status]}</small>}
     </div>
-    <div className="integrated-controls">
+    <div className="integrated-controls col-span-full min-[1101px]:col-span-1">
       <PlayButton radio={radio} />
       <VolumeControl {...player} />
       {player.radio && <button type="button" className="icon-button" aria-label="Parar reprodução" onClick={player.stop}><Square size={17} /></button>}
+    </div>
+    <div className="integrated-equalizer col-start-2 row-start-1 flex h-14 w-20 items-center justify-center gap-1.5 justify-self-end md:w-28 md:gap-2 min-[1101px]:col-start-3" data-playing={playing} aria-hidden="true">
+      {[24, 42, 30, 56, 34, 46, 22].map((height, index) => <i className="w-1.5 md:w-2" key={height} style={{ height, animationDelay: -index * .13 + 's' }} />)}
+    </div>
+    <div className="integrated-session" data-playing={playing}>
+      <SessionTime key={(player.radio?.id ?? radio.id) + ':' + player.clock.elapsed + ':' + player.clock.startedAt} clock={player.clock} />
+      <span className="session-activity" aria-hidden="true" />
     </div>
   </section>
 }
@@ -158,8 +168,22 @@ function NowPlayingInfo({ radio, metadata, link = false }: { radio: Radio; metad
   </div>
 }
 
+function SessionTime({ clock }: { clock: PlaybackClock }) {
+  const [seconds, setSeconds] = useState(() => Math.floor((clock.elapsed + (clock.startedAt === null ? 0 : performance.now() - clock.startedAt)) / 1000))
+  useEffect(() => {
+    if (clock.startedAt === null) return
+    const startedAt = clock.startedAt
+    const tick = () => setSeconds(Math.floor((clock.elapsed + performance.now() - startedAt) / 1000))
+    const timer = window.setInterval(tick, 200)
+    return () => window.clearInterval(timer)
+  }, [clock])
+  const parts = [Math.floor(seconds / 60) % 60, seconds % 60]
+  if (seconds >= 3600) parts.unshift(Math.floor(seconds / 3600))
+  return <span className="session-time" aria-label="Tempo de reprodução">{parts.map(part => String(part).padStart(2, '0')).join(':')}</span>
+}
+
 export function PlayerBar() {
-  const { radio, status, metadata, stop, volume, changeVolume, canSkip, skip, mainVisible } = useContext(Player)!
+  const { radio, status, metadata, stop, volume, changeVolume, mainVisible } = useContext(Player)!
   if (!radio || mainVisible || (status !== 'playing' && status !== 'loading')) return null
   const message = playbackMessage[status]
   return <aside className="player-bar" aria-label="Player">
@@ -167,9 +191,7 @@ export function PlayerBar() {
       {status === 'loading' && <small role="status">{message}</small>}</div>
     <div className="player-controls">
       <FavoriteButton slug={radio.slug} compact />
-      {canSkip && <button className="icon-button player-skip" type="button" onClick={() => skip(-1)} aria-label="Rádio anterior"><SkipBack size={19} /></button>}
       <PlayButton radio={radio} compact />
-      {canSkip && <button className="icon-button player-skip" type="button" onClick={() => skip(1)} aria-label="Próxima Rádio"><SkipForward size={19} /></button>}
     </div>
     <VolumeControl volume={volume} changeVolume={changeVolume} />
     {status === 'playing' && <span className="player-live">Ao vivo</span>}

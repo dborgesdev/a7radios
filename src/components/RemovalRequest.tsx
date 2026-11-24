@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type FormEvent } from 'react'
+import { Flag } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import type { OwnRadio } from '../domain'
@@ -38,7 +39,7 @@ export function RemovalRequest({ id, name, owner = false, status }: {
 
   return <>
     <button ref={trigger} type="button" className="button secondary" onClick={() => dialog.current?.showModal()}
-      aria-haspopup="dialog">{current ? labels[current] : 'Solicitar remoção'}</button>
+      aria-haspopup="dialog"><Flag size={18} aria-hidden="true" />{current ? labels[current] : 'Solicitar remoção'}</button>
     <dialog className="document-dialog" aria-labelledby={titleId} ref={dialog} onClose={() => trigger.current?.focus()}>
       <h2 id={titleId}>Solicitar remoção</h2>
       <p className="removal-station">{name}</p>

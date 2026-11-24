@@ -27,11 +27,13 @@ function review_panel(array $row): void {
     $data = state($row);
     $revision = $data['revision'];
     $before = $data['published'];
-    $after = $revision['fields'];
+    $after = radio_app_fields($revision['fields']) + $revision['fields'];
+    if ($before !== null) $before = radio_app_fields($before) + $before;
     $labels = [
         'name' => 'Nome', 'category' => 'Categoria', 'country' => 'País', 'region' => 'Estado/região', 'city' => 'Cidade',
         'description' => 'Descrição', 'streamUrl' => 'Streaming', 'websiteUrl' => 'Site',
-        'appDownloadUrl' => 'Aplicativo', 'asset' => 'Imagem',
+        'appLinkMode' => 'Modalidade do aplicativo', 'appDownloadUrl' => 'Link único',
+        'androidAppUrl' => 'Link Android', 'iphoneAppUrl' => 'Link iPhone', 'asset' => 'Imagem',
     ];
     ?>
     <h2><?= esc_html($after['name']) ?></h2>
@@ -82,6 +84,10 @@ function review_panel(array $row): void {
 }
 
 function review_value(array $row, string $field, mixed $value, bool $thumb = false): void {
+    if ($field === 'appLinkMode' && $value) {
+        echo $value === 'platforms' ? 'Links separados para Android e iPhone' : 'Link único (automático)';
+        return;
+    }
     if ($field === 'asset' && $value) {
         $link = add_query_arg(['action' => 'a7r_review_image', 'id' => $row['id'], 'asset' => $value], admin_url('admin-post.php'));
         $link = wp_nonce_url($link, 'a7r_review_image_' . $row['id']);
@@ -237,8 +243,8 @@ add_action('current_screen', static function ($screen) {
 add_action('admin_enqueue_scripts', static function ($hook) {
     $page = isset($_GET['page']) && is_string($_GET['page']) ? sanitize_key($_GET['page']) : '';
     if (!current_user_can('a7r_moderate') || ($hook !== 'index.php' && !in_array($page, ['a7r', 'a7r-legal', 'a7r-requests'], true))) return;
-    wp_enqueue_style('a7r-admin', plugins_url('admin.css', __FILE__), [], '2.2.0');
-    if (in_array($page, ['a7r', 'a7r-legal'], true)) wp_enqueue_script('a7r-admin', plugins_url('admin.js', __FILE__), [], '2.2.0', true);
+    wp_enqueue_style('a7r-admin', plugins_url('admin.css', __FILE__), [], '2.3.0');
+    if (in_array($page, ['a7r', 'a7r-legal'], true)) wp_enqueue_script('a7r-admin', plugins_url('admin.js', __FILE__), [], '2.3.0', true);
 });
 
 add_action('wp_dashboard_setup', static function () {

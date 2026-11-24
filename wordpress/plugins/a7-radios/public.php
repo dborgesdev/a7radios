@@ -72,10 +72,31 @@ function has_published(): bool {
 }
 
 function front_assets(): array {
-    $path = frontend_dir() . '/.vite/manifest.json';
-    if (!is_readable($path)) return [];
-    $manifest = json_decode(file_get_contents($path), true);
-    return $manifest['index.html'] ?? [];
+    $root = frontend_dir();
+    $asset = static function ($path, string $extension) use ($root): ?string {
+        if (!is_string($path)) return null;
+        $path = ltrim($path, '/');
+        if (!preg_match('#^assets/[a-zA-Z0-9_.-]+\.' . $extension . '$#D', $path)) return null;
+        return is_file($root . '/' . $path) ? $path : null;
+    };
+
+    $path = $root . '/.vite/manifest.json';
+    $manifest = is_file($path) ? json_decode((string) @file_get_contents($path), true) : null;
+    $entry = $manifest['index.html'] ?? [];
+    $file = $asset($entry['file'] ?? null, 'js');
+    $declared_css = is_array($entry['css'] ?? null) ? $entry['css'] : [];
+    $css = array_values(array_filter(array_map(static fn($path) => $asset($path, 'css'), $declared_css)));
+    if ($file && $css && count($css) === count($declared_css)) return ['file' => $file, 'css' => $css];
+
+    // The generated entry contains the same hashed references when a hidden manifest was omitted.
+    $path = $root . '/index.html';
+    if (!is_file($path)) return [];
+    $html = (string) @file_get_contents($path);
+    preg_match('~<script\s+type="module"\s+(?:crossorigin\s+)?src="([^"]+)"~', $html, $module);
+    preg_match_all('~<link\s+rel="stylesheet"\s+(?:crossorigin\s+)?href="([^"]+)"~', $html, $stylesheets);
+    $css = array_map(static fn($path) => $asset($path, 'css'), $stylesheets[1]);
+    if (!$css || in_array(null, $css, true)) return [];
+    return ['file' => $asset($module[1] ?? null, 'js'), 'css' => array_values(array_unique($css))];
 }
 
 function html_page(string $title, string $description, ?string $canonical, bool $index, int $status, ?array $radio = null, string $route = ''): never {
@@ -117,8 +138,12 @@ function html_page(string $title, string $description, ?string $canonical, bool 
     'description' => $radio['description'], 'image' => $image, 'inLanguage' => 'pt-BR',
 ]) ?></script>
 <?php endif; endif; ?>
-<?php foreach ($assets['css'] ?? [] as $css): ?><link rel="stylesheet" href="/<?= esc_attr($css) ?>">
+<?php if (!empty($assets['css'])): ?>
+<?php foreach ($assets['css'] as $css): ?><link rel="stylesheet" href="/<?= esc_attr($css) ?>">
 <?php endforeach; ?>
+<?php else: ?>
+<style>html{color:#231a21;background:#f8f5f6;font:1rem/1.55 system-ui,sans-serif}body{margin:0}img{max-width:100%;height:auto}.shell{max-width:75rem;margin:auto;padding:1rem}.site-header,.site-footer,.station-hero,.hero{background:#111013;color:#fff}a{color:inherit}.header-inner,.footer-inner,.station-links{display:flex;flex-wrap:wrap;gap:1rem;align-items:center}.navigation{display:flex;flex-wrap:wrap;gap:.75rem}.skip:not(:focus){position:absolute;clip-path:inset(50%)}.station-art{max-width:20rem}.button{display:inline-block;padding:.55rem 1rem;border:1px solid currentColor;border-radius:1rem}input{max-width:100%}</style>
+<?php endif; ?>
 </head><body><div id="root">
 <a class="skip" href="#conteudo">Ir para o conteúdo</a>
 <header class="site-header"><div class="shell header-inner">
@@ -142,13 +167,34 @@ function html_page(string $title, string $description, ?string $canonical, bool 
     </div></header>
     <div class="shell page station-body">
         <section class="station-editorial content-section"><div><h2>Sobre a rádio</h2><p><?= esc_html($radio['description']) ?></p></div>
-            <?php if ($radio['websiteUrl'] || $radio['appDownloadUrl']): ?><div class="station-links">
+            <?php
+            $app = radio_app_fields($radio);
+            $downloads = $app['appLinkMode'] === 'platforms'
+                ? ['Android' => $app['androidAppUrl'], 'iPhone' => $app['iphoneAppUrl']]
+                : ['Baixar App' => $app['appDownloadUrl']];
+            $downloads = array_filter($downloads);
+            ?>
+            <?php if ($radio['websiteUrl'] || $downloads): ?><div class="station-links">
                 <?php if ($radio['websiteUrl']): ?><a class="button secondary" href="<?= esc_url($radio['websiteUrl']) ?>" target="_blank" rel="noopener noreferrer">Visitar site da Rádio</a><?php endif; ?>
-                <?php if ($radio['appDownloadUrl']): ?><a class="button secondary" href="<?= esc_url($radio['appDownloadUrl']) ?>" target="_blank" rel="noopener noreferrer">Baixar App</a><?php endif; ?>
+                <?php foreach ($downloads as $label => $url): ?><a class="button secondary" href="<?= esc_url($url) ?>" target="_blank" rel="noopener noreferrer"><?= esc_html($label) ?></a><?php endforeach; ?>
             </div><?php endif; ?>
         </section>
         <?php radio_links($radio); ?>
     </div>
+<?php elseif ($route === '/'): ?>
+    <section class="hero"><div class="shell hero-inner">
+        <div class="hero-copy">
+            <p class="hero-label">A7 Rádios On-Line</p>
+            <h1>Rádios do Brasil<br>em um só <em>lugar</em></h1>
+            <p>Encontre emissoras por categoria, região e estilo. Do Brasil para o mundo.</p>
+        </div>
+        <form class="hero-search" role="search" action="/radios/" method="get">
+            <label><input type="search" name="search" aria-label="Buscar rádio, categoria ou cidade" placeholder="Rádio, categoria ou cidade"></label>
+            <button class="button primary">Buscar</button>
+        </form>
+        <div class="hero-categories"><a href="/radios/">Todas as categorias</a></div>
+    </div></section>
+    <div class="shell page"><?php radio_links(); ?></div>
 <?php else: ?>
     <div class="shell page"><h1><?= esc_html($route === '/' ? 'Do Brasil para o mundo' : $body_title) ?></h1>
     <?php if ($status === 404 || in_array($route, ['/', '/radios'], true)): ?>

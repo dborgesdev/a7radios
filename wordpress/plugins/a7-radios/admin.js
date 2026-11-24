@@ -40,3 +40,15 @@ document.querySelectorAll('.a7r-bulk').forEach(form => {
     master.indeterminate = count > 0 && count < items.length
   }))
 })
+
+document.querySelectorAll('[data-a7r-app-links]').forEach(group => {
+  const mode = group.querySelector('[name=appLinkMode]')
+  const update = () => group.querySelectorAll('[data-app-mode]').forEach(field => {
+    const active = field.dataset.appMode === mode.value
+    field.hidden = !active
+    field.style.display = active ? '' : 'none'
+    field.querySelector('input').disabled = !active
+  })
+  mode.addEventListener('change', update)
+  update()
+})

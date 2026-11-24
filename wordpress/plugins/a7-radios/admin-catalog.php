@@ -169,8 +169,22 @@ function manual_edit_panel(array $row): void {
             <?php endforeach; ?>
         </div></fieldset>
         <fieldset class="a7r-edit-section"><legend>Transmissão e links</legend><div class="a7r-edit-fields">
-            <?php foreach (['streamUrl' => 'URL do streaming', 'websiteUrl' => 'Website oficial', 'appDownloadUrl' => 'URL do aplicativo'] as $key => $label): ?>
+            <?php foreach (['streamUrl' => 'URL do streaming', 'websiteUrl' => 'Website oficial'] as $key => $label): ?>
                 <label><?= esc_html($label) ?><input type="url" name="<?= esc_attr($key) ?>" maxlength="2000" value="<?= esc_attr($fields[$key] ?? '') ?>" <?= $key === 'streamUrl' ? 'required' : '' ?>></label>
+            <?php endforeach; ?>
+        </div>
+        <?php $app = radio_app_fields($fields); ?>
+        <div class="a7r-edit-fields" data-a7r-app-links>
+            <label>Modalidade do aplicativo
+                <select name="appLinkMode">
+                    <option value="single" <?php selected($app['appLinkMode'], 'single'); ?>>Link único (automático)</option>
+                    <option value="platforms" <?php selected($app['appLinkMode'], 'platforms'); ?>>Links separados para Android e iPhone</option>
+                </select>
+            </label>
+            <?php foreach (['appDownloadUrl' => 'Link único do aplicativo', 'androidAppUrl' => 'Link do aplicativo para Android', 'iphoneAppUrl' => 'Link do aplicativo para iPhone'] as $key => $label): ?>
+                <label data-app-mode="<?= $key === 'appDownloadUrl' ? 'single' : 'platforms' ?>"><?= esc_html($label) ?>
+                    <input type="url" name="<?= esc_attr($key) ?>" maxlength="2000" value="<?= esc_attr($app[$key]) ?>">
+                </label>
             <?php endforeach; ?>
         </div></fieldset>
         <fieldset class="a7r-edit-section"><legend>Apresentação</legend>

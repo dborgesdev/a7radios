@@ -30,3 +30,11 @@ O cadastro e a alteração de e-mail usam o SMTP configurado para `wp_mail()`. N
 A exclusão definitiva exige administrador, nonce e confirmação. Exclui o registro da rádio, suas revisões e os pedidos de remoção vinculados. A tabela de opções precisa usar InnoDB para a exclusão transacional. Imagens com referências em outras rádios são mantidas. O registro mínimo de auditoria conserva o ID da rádio, a data e o ID do administrador. Se houver cache externo de HTML, invalide as rotas afetadas pela ação `a7r_radio_deleted`.
 
 Mantenha `A7R_INDEX=true` e a configuração de cadastro existente. Use os dois ZIPs do release 2.2.0 e mescle o trecho Apache fornecido. Confirme a entrega de um e-mail de cadastro com conta controlada após a troca.
+
+## Atualização 2.3.0
+
+Substitua o plugin pelo ZIP `a7-radios-wordpress-2.3.0.zip` no painel WordPress e publique o conteúdo de `a7-radios-frontend-2.3.0.zip` na raiz do domínio. Envie primeiro os novos arquivos com hash em `assets/`. Em seguida, substitua `index.html` e `.vite/manifest.json`. O manifesto fica em uma pasta oculta. Mantenha os assets anteriores até confirmar a troca.
+
+Esta atualização não exige edição do `.htaccess` nem do `wp-config.php`. Preserve as configurações atuais, o banco e os arquivos de mídia. Os links por plataforma são armazenados nos snapshots existentes. Quem já tinha um link único continua com ele. Revisões continuam sujeitas à aprovação antes da exposição pública.
+
+A página PHP carrega o CSS no HTML inicial. Se o manifesto estiver indisponível, o PHP resolve os assets compilados a partir do `index.html`. Mantenha o HTML e sua versão correspondente do frontend juntos durante a troca.

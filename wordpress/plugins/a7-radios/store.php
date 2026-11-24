@@ -114,11 +114,21 @@ function published_time(string $value): string {
     return gmdate(DATE_ATOM, strtotime($value . ' UTC'));
 }
 
+function radio_app_fields(array $fields): array {
+    $platforms = ($fields['appLinkMode'] ?? 'single') === 'platforms';
+    return [
+        'appLinkMode' => $platforms ? 'platforms' : 'single',
+        'appDownloadUrl' => $platforms ? '' : ($fields['appDownloadUrl'] ?? ''),
+        'androidAppUrl' => $platforms ? ($fields['androidAppUrl'] ?? '') : '',
+        'iphoneAppUrl' => $platforms ? ($fields['iphoneAppUrl'] ?? '') : '',
+    ];
+}
+
 function public_radio(array $row): array {
     $fields = state($row)['published'];
     $asset = $fields['asset'];
     unset($fields['asset'], $fields['categoryId']);
-    return $fields + [
+    return radio_app_fields($fields) + $fields + [
         'id' => (int) $row['id'],
         'slug' => $row['slug'],
         'image' => [
@@ -149,7 +159,7 @@ function own_radio(array $row): array {
         'imagePath' => '/app/wp-json/a7-radios/v1/me/radios/' . $row['id'] . '/image/' . $asset,
         'revisionStatus' => $revision['status'], 'submittedAt' => $revision['submittedAt'],
         'categorySuggestion' => $revision['categorySuggestion'] ?? null,
-        'reason' => $revision['reason'] ?? '', 'categoryName' => $revision['fields']['category']['name'], 'draft' => $draft,
+        'reason' => $revision['reason'] ?? '', 'categoryName' => $revision['fields']['category']['name'], 'draft' => radio_app_fields($draft) + $draft,
         'history' => array_map(static fn($item) => [
             'id' => $item['id'], 'status' => $item['status'], 'reason' => $item['reason'],
             'decidedAt' => $item['decidedAt'],
