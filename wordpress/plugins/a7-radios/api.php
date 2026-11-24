@@ -242,13 +242,18 @@ function validate_fields(\WP_REST_Request $request, ?array $suggestion = null): 
         return err('Selecione um estado brasileiro.', 422, 'region');
     }
     if ($fields['country'] === 'Outro' && $fields['region'] === '') return err('Informe a região ou localidade.', 422, 'region');
-    foreach (['streamUrl', 'websiteUrl', 'appDownloadUrl'] as $key) {
+    $mode = $request['appLinkMode'] ?? 'single';
+    if (!in_array($mode, ['single', 'platforms'], true)) return err('Selecione uma modalidade de link válida.', 422, 'appLinkMode');
+    $fields['appLinkMode'] = $mode;
+    $app_keys = $mode === 'single' ? ['appDownloadUrl'] : ['androidAppUrl', 'iphoneAppUrl'];
+    foreach (['streamUrl', 'websiteUrl', ...$app_keys] as $key) {
         $value = $request[$key] ?? '';
-        if (!is_string($value) || (($key === 'streamUrl' || $value !== '') && !external_url($value))) {
+        if (!is_string($value) || strlen($value) > 2000 || (($key === 'streamUrl' || $value !== '') && !external_url($value))) {
             return err('Informe um endereço HTTPS público válido.', 422, $key);
         }
         $fields[$key] = $value;
     }
+    $fields = radio_app_fields($fields) + $fields;
     $raw = $request['categoryId'];
     $term = is_scalar($raw) && ctype_digit((string) $raw) ? get_term((int) $raw, 'a7_radio_category') : null;
     if (($raw === null || $raw === '' || $raw === '0') && $suggestion) {

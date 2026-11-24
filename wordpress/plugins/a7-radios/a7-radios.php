@@ -2,7 +2,7 @@
 /**
  * Plugin Name: A7 Rádios On-Line
  * Description: Catálogo, proprietários, moderação e páginas públicas A7.
- * Version: 2.2.0
+ * Version: 2.3.0
  * Requires at least: 6.6
  * Requires PHP: 8.2
  */

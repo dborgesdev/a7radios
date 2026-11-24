@@ -1,7 +1,7 @@
 export type Category = { id: number; slug: string; name: string; count?: number }
 export type RadioFields = {
   name: string; categoryId: number; country: string; region: string; city?: string; description: string
-  streamUrl: string; websiteUrl: string; appDownloadUrl: string
+  streamUrl: string; websiteUrl: string; appDownloadUrl: string; appLinkMode?: 'single' | 'platforms'; androidAppUrl?: string; iphoneAppUrl?: string
 }
 export type Radio = Omit<RadioFields, 'categoryId'> & {
   id: number; slug: string; category: Category; approvedUpdatedAt: string; visitCount?: number

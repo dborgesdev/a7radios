@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api, useApi } from '../api'
 import { useAuth } from '../auth'
 import { CategorySuggestion } from '../components/CategorySuggestion'
+import { AppLinkFields } from '../components/AppLinkFields'
 import { RemovalRequest } from '../components/RemovalRequest'
 import { PageHero } from '../components/PageHero'
 import { statusLabel, type Category, type OwnRadio, type Terms } from '../domain'
@@ -104,8 +105,7 @@ function Editor({ existing, categories, terms, remoteImages, nonce }: {
           <small>Cole o endereço direto de áudio, com https://, porta e caminho quando houver. Ex.: https://s04.svrdedicado.org:7228/stream. Não cole a página do player.</small>{fieldError('streamUrl')}</label>
         <label>Website oficial<input name="websiteUrl" type="url" defaultValue={draft?.websiteUrl} maxLength={2000} />
           <small>Endereço do site da rádio, começando por https://</small>{fieldError('websiteUrl')}</label>
-        <label>URL de download do aplicativo<input name="appDownloadUrl" type="url" defaultValue={draft?.appDownloadUrl} maxLength={2000} />
-          <small>Cole o link público da loja de aplicativos ou da página oficial de download; não envie arquivos de aplicativo.</small>{fieldError('appDownloadUrl')}</label>
+        <AppLinkFields draft={draft} fieldError={fieldError} />
         </section>
         <section className="form-panel" id="apresentacao"><h2>Apresentação</h2>
         <label>Descrição<textarea name="description" defaultValue={draft?.description} required rows={5} maxLength={2000} />

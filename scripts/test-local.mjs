@@ -218,6 +218,13 @@ assert.doesNotMatch(await verify(await anon.request('/robots.txt'), 200), /^Site
 const publicRadio = await json(await anon.request(rest + '/radios/' + radio.slug), 200)
 assert.equal(new URL(publicRadio.image.url).pathname, originalImage.api)
 assert.equal(publicRadio.city, fields.city)
+assert.equal(publicRadio.appLinkMode, 'single')
+assert.equal(publicRadio.appDownloadUrl, fields.appDownloadUrl)
+const stylesheet = html.match(/<head>[\s\S]*?<link rel="stylesheet" href="([^"]+)"/)?.[1]
+assert.ok(stylesheet, 'O CSS do WordPress precisa estar no head antes do corpo.')
+const cssResponse = await anon.request(stylesheet, { method: 'HEAD' })
+assert.equal(cssResponse.status, 200)
+assert.match(cssResponse.headers.get('content-type'), /text\/css/)
 assert.ok(html.includes(fields.city))
 assert.equal((await json(await anon.request(rest + '/radios?search=' + encodeURIComponent(fields.city)), 200)).total, 1)
 const ownImage = (await json(await ownerA.request(privatePath, { headers }), 200)).imagePath
@@ -238,16 +245,19 @@ await verify(await anon.request('/app/wp-json/'), 200)
 await verify(await anon.request('/app/wp-login.php'), 200)
 console.log('OK HTML livre de dependência de JS, status 200/301/404, canonical, OG, Twitter, JSON-LD, imagem, sitemap e rotas /app/')
 
-async function revision(name, replaceImage = false) {
+async function revision(name, replaceImage = false, app = {}, expected = 201) {
   const current = await json(await ownerA.request(privatePath, { headers }), 200)
-  const body = form({ ...fields, name, version: current.version, revisionId: current.revisionId })
+  const body = form({ ...fields, ...app, name, version: current.version, revisionId: current.revisionId })
   if (replaceImage) body.set('image', logo, 'revision.png')
   return json(await ownerA.request(privatePath + '/revisions', {
     method: 'POST', headers, body,
-  }), 201)
+  }), expected)
 }
 
-await revision(revised, true)
+await revision(revised, false, { appLinkMode: 'platforms', androidAppUrl: 'http://example.com/invalid' }, 422)
+const platformLinks = { appLinkMode: 'platforms', androidAppUrl: 'https://play.google.com/store/apps/details?id=com.example.radio' }
+await revision(revised, true, platformLinks)
+assert.equal((await json(await anon.request(rest + '/radios/' + radio.slug), 200)).appLinkMode, 'single')
 const rejectedImage = (await reviewImages())[1]
 assert.notEqual(rejectedImage.api, originalImage.api)
 await verify(await anon.request(rejectedImage.api), 404)
@@ -258,7 +268,7 @@ const stale = await moderationForm()
 await decide('reject', 303, stale)
 await verify(await anon.request(rejectedImage.api), 404)
 assert.ok((await verify(await anon.request(page), 200)).includes('<h1>' + original + '</h1>'))
-await revision(revised, true)
+await revision(revised, true, platformLinks)
 const replacementImage = (await reviewImages())[1]
 assert.notEqual(replacementImage.api, rejectedImage.api)
 await decide('approve', 409, stale)
@@ -271,7 +281,16 @@ await verify(await anon.request(replacementImage.api, { method: 'HEAD' }), 200)
 await verify(await anon.request(rejectedImage.api), 404)
 await verify(await anon.request(originalImage.api), 404)
 await verify(await anon.request(replacementImage.disk), 403)
-assert.ok((await verify(await anon.request(page), 200)).includes('<h1>' + revised + '</h1>'))
+const platformPage = await verify(await anon.request(page), 200)
+assert.ok(platformPage.includes('<h1>' + revised + '</h1>'))
+assert.ok(platformPage.includes(platformLinks.androidAppUrl))
+assert.doesNotMatch(platformPage, />Baixar App<|>iPhone</)
+const appPublic = await json(await anon.request(rest + '/radios/' + radio.slug), 200)
+assert.equal(appPublic.appLinkMode, 'platforms')
+assert.equal(appPublic.androidAppUrl, platformLinks.androidAppUrl)
+assert.equal(appPublic.appDownloadUrl, '')
+assert.equal(appPublic.iphoneAppUrl, '')
+console.log('OK link único legado, validação HTTPS e apenas Android publicado após aprovação')
 const first = await anon.request(rest + '/radios/' + radio.id + '/visit', { method: 'POST' })
 await verify(first, 204)
 await verify(await anon.request(rest + '/radios/' + radio.id + '/visit', { method: 'POST' }), 204)
@@ -284,9 +303,12 @@ else {
   const editNonce = editor.match(/name="_wpnonce" value="([^"]+)"/)?.[1]
   const sequence = editor.match(/name="sequence" value="([^"]+)"/)?.[1]
   assert.ok(editNonce && sequence)
-  const adminEdit = { ...fields, name: revised + ' · administração', action: 'a7r_manual_edit', id: radio.id, sequence, _wpnonce: editNonce, reason: 'Correção DEMO' }
+  const adminEdit = { ...fields, appLinkMode: 'platforms', iphoneAppUrl: 'https://apps.apple.com/br/app/id123456', name: revised + ' · administração', action: 'a7r_manual_edit', id: radio.id, sequence, _wpnonce: editNonce, reason: 'Correção DEMO' }
   await verify(await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: form(adminEdit) }), 303)
-  assert.equal((await json(await anon.request(rest + '/radios/' + radio.slug), 200)).name, adminEdit.name)
+  const adminPublic = await json(await anon.request(rest + '/radios/' + radio.slug), 200)
+  assert.equal(adminPublic.name, adminEdit.name)
+  assert.equal(adminPublic.iphoneAppUrl, adminEdit.iphoneAppUrl)
+  assert.equal(adminPublic.androidAppUrl, '')
   await verify(await admin.request('/app/wp-admin/admin-post.php', { method: 'POST', body: form(adminEdit) }), 409)
   await verify(await ownerB.request(privatePath + '/removal', { method: 'POST', headers: { 'X-WP-Nonce': ownerB.nonce }, body: form({ reason: 'Isolamento DEMO' }) }), 404)
   const ownerRemoval = () => ownerA.request(privatePath + '/removal', { method: 'POST', headers, body: form({ reason: 'Pedido privado DEMO' }) })

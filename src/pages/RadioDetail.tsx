@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PageHero } from '../components/PageHero'
+import { AppDownloadLinks, appLinks } from '../components/AppDownloadLinks'
 import { RemovalRequest } from '../components/RemovalRequest'
-import { Eye, MapPin, Share2 } from 'lucide-react'
+import { Eye, Globe, MapPin, Share2 } from 'lucide-react'
 import { demo, recordVisit, useApi } from '../api'
 import { Cover, RadioCards } from '../components/RadioCards'
 import { locationLabel, radioPath, type Radio, type Page } from '../domain'
@@ -60,7 +61,7 @@ function RadioProfile({ radio, direct }: { radio: Radio; direct: boolean }) {
             <div className="station-actions">
               <FavoriteButton slug={radio.slug} />
               <button onClick={share} className="button secondary"><Share2 size={18} /> Compartilhar</button>
-              {count !== undefined && <span className="station-visits"><Eye size={18} aria-hidden="true" />{count} {count === 1 ? 'visita à página' : 'visitas à página'}</span>}
+              {count !== undefined && <span className="station-visits" aria-label={count + (count === 1 ? ' visita' : ' visitas')}><Eye size={18} aria-hidden="true" />{count}</span>}
             </div>
             {sharing && <p role="status" className="break-all">{sharing}</p>}
           </div>
@@ -69,9 +70,9 @@ function RadioProfile({ radio, direct }: { radio: Radio; direct: boolean }) {
     </header>
     <div className="shell page station-body">
       <section className="station-editorial content-section"><div><h2>Sobre a rádio</h2><p>{radio.description}</p></div>
-        {(radio.websiteUrl || radio.appDownloadUrl || !demo) && <div className="station-links">
-          {radio.websiteUrl && <a className="button secondary" href={radio.websiteUrl} target="_blank" rel="noopener noreferrer">Visitar site da Rádio</a>}
-          {radio.appDownloadUrl && <a className="button secondary" href={radio.appDownloadUrl} target="_blank" rel="noopener noreferrer">Baixar App</a>}
+        {(radio.websiteUrl || appLinks(radio).length > 0 || !demo) && <div className="station-links">
+          {radio.websiteUrl && <a className="button secondary" href={radio.websiteUrl} target="_blank" rel="noopener noreferrer"><Globe size={18} aria-hidden="true" /> Visitar site da Rádio</a>}
+          <AppDownloadLinks radio={radio} />
           {!demo && <RemovalRequest id={radio.id} name={radio.name} />}
         </div>}
       </section>
